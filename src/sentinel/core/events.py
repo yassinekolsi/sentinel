@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
@@ -66,10 +66,11 @@ class LogicalClock:
 class EventLog:
     """In-memory append-only event log with deterministic IDs."""
 
-    def __init__(self, run_id: str, clock: LogicalClock) -> None:
+    def __init__(self, run_id: str, clock: LogicalClock, sink: Callable[[Event], None] | None = None) -> None:
         self.run_id = run_id
         self._clock = clock
         self._events: list[Event] = []
+        self._sink = sink
 
     def append(
         self,
@@ -95,6 +96,8 @@ class EventLog:
             policy=policy or {},
         )
         self._events.append(event)
+        if self._sink is not None:
+            self._sink(event)
         return event
 
     def __iter__(self) -> Iterator[Event]:

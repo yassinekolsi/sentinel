@@ -281,7 +281,7 @@ class Scenario(_Strict):
 
     @model_validator(mode="after")
     def _cross_checks(self) -> Self:
-        if Path(self.fixture).is_absolute() or ".." in Path(self.fixture).parts:
+        if Path(self.fixture).anchor or ".." in Path(self.fixture).parts or ":" in self.fixture:
             raise ValueError("fixture must be a relative path inside the benchmark root (no '..')")
         if not self.fixture.endswith(".json"):
             raise ValueError("fixture must be a .json file")

@@ -26,7 +26,7 @@ class StateError(ValueError):
 def resolve_within(root: Path, relative: str) -> Path:
     """Resolve ``relative`` under ``root`` and refuse anything that escapes it."""
     candidate = Path(relative)
-    if candidate.is_absolute():
+    if candidate.anchor or ":" in relative:
         raise StateError(f"absolute paths are not allowed: {relative!r}")
     resolved_root = root.resolve()
     resolved = (resolved_root / candidate).resolve()

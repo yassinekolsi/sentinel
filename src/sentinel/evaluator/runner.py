@@ -19,7 +19,7 @@ from sentinel.attackers.interface import Attacker, AttackRequest, SeedPayload, T
 from sentinel.attackers.validator import AttackMutationValidator
 from sentinel.config import BENCHMARK_VERSION, CompetitionConfig
 from sentinel.core.actions import ActionType, CandidateAction, DefenseDecision
-from sentinel.core.events import Actor, EventLog, EventType, LogicalClock
+from sentinel.core.events import Actor, Event, EventLog, EventType, LogicalClock
 from sentinel.core.policies import Finding, PolicyEngine, load_policy
 from sentinel.core.result import (
     AttackMutationRecord,
@@ -59,6 +59,7 @@ class RunConfig:
     include_reference_plan: bool = True
     artifacts: ArtifactStore | None = None
     artifact_group: str = "runs"
+    event_sink: Callable[[Event], None] | None = None
 
 
 @dataclass
@@ -276,7 +277,7 @@ def run_scenario(
     run_id = sanitize_id(f"{scenario.id}-{defense.name}-s{competition.run_seed}")
     state = WorldState.from_scenario(scenario, config.root, competition.run_seed)
     clock = LogicalClock(seed)
-    log = EventLog(run_id, clock)
+    log = EventLog(run_id, clock, sink=config.event_sink)
     registry = registry_for_domain(scenario.domain.value)
     gateway = ToolGateway(registry, state)
     policy = PolicyEngine(load_policy(config.root, scenario.policy_profile), scenario)

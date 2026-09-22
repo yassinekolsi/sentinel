@@ -18,7 +18,13 @@ def test_bad_submission_is_rejected(tmp_path: Path) -> None:
     (tmp_path / "sentinel-submission.yaml").write_text("name: Bad Name\nkind: defense\n")
     (tmp_path / ".env").write_text("TOKEN=x")
     (tmp_path / "config.py").write_text('api_key = "abcdefghijklmnopqrstuvwxyz"\n')
-    (tmp_path / "escape").symlink_to("/etc")
+    symlink_available = True
+    try:
+        (tmp_path / "escape").symlink_to("/etc")
+    except OSError as exc:
+        if getattr(exc, "winerror", None) != 1314:
+            raise
+        symlink_available = False
     report = validate_submission(str(tmp_path))
     result = statuses(report)
     assert not report.ok
@@ -29,6 +35,8 @@ def test_bad_submission_is_rejected(tmp_path: Path) -> None:
         "no_secrets",
         "no_escaping_symlinks",
     ):
+        if name == "no_escaping_symlinks" and not symlink_available:
+            continue
         assert result[name] == "fail", name
 
 
