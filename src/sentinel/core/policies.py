@@ -259,8 +259,5 @@ class PolicyEngine:
             "consequential_tools": sorted(
                 name for name, tool in tools.items() if getattr(tool, "consequential", False)
             ),
-            "rules": [
-                rule.model_dump(mode="json")
-                for rule in self.policy.rules
-            ],
+            "rules": [rule.model_dump(mode="json") for rule in self.policy.rules],
         }

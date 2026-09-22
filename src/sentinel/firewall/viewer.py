@@ -147,6 +147,7 @@ def render(
     kind: str | None = None,
     decision: str | None = None,
     last: int | None = None,
+    live: bool = False,
 ) -> Group:
     events = redact(events)
     selected_steps = {
@@ -170,9 +171,11 @@ def render(
         content = _decision_content(payload) if label == "defense_decision" else _outcome_content(label, payload)
         event_label = Text(label + "\n" + str(event.get("actor", "")))
         table.add_row(str(event.get("step_id")), event_label, content)
-    heading = Panel(
-        Text("sentiel | action firewall\nUncalibrated risk indicators | synthetic data | simulated human approvals")
-    )
+    status = "LIVE STREAM" if live else "RECORDED REPLAY"
+    heading_text = Text("sentiel | action firewall | ")
+    heading_text.append(status, style="bold green" if live else "bold cyan")
+    heading_text.append("\nUncalibrated risk indicators | synthetic data | simulated human approvals")
+    heading = Panel(heading_text)
     return Group(heading, table)
 
 
@@ -189,7 +192,7 @@ def view(
     if follow:
         with Live(console=console, refresh_per_second=2) as live:
             while True:
-                live.update(render(read_live(path), step=step, kind=kind, decision=decision, last=12))
+                live.update(render(read_live(path), step=step, kind=kind, decision=decision, last=12, live=True))
                 time.sleep(0.5)
     else:
         console.print(render(read_live(path), step=step, kind=kind, decision=decision))

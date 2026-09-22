@@ -4,7 +4,7 @@ import json
 from rich.console import Console
 
 from sentinel.firewall.reporting import exact_payload_observed, summarize, write_report
-from sentinel.firewall.viewer import render
+from sentinel.firewall.viewer import render, view
 
 
 def test_exact_payload_observation_walks_string_leaves_without_json_escaping():
@@ -75,11 +75,36 @@ def test_render_makes_rewrite_and_outcomes_visible_without_parsing_markup():
     output = io.StringIO()
     Console(file=output, color_system=None, width=300).print(render(events))
     rendered = output.getvalue()
+    assert "RECORDED REPLAY" in rendered
+    assert "LIVE STREAM" not in rendered
+    assert "synthetic data | simulated human approvals" in rendered
     assert "candidate action:" in rendered
     assert "effective action (rewrite):" in rendered
     assert "SUCCEEDED  tool=ticket_update" in rendered
     assert "TASK SUCCESS" in rendered
     assert "[bold red]literal markup[/bold red]" in rendered
+
+
+def test_render_labels_follow_content_as_live_stream():
+    output = io.StringIO()
+    Console(file=output, color_system=None, width=300).print(render([], live=True))
+    rendered = output.getvalue()
+    assert "LIVE STREAM" in rendered
+    assert "RECORDED REPLAY" not in rendered
+    assert "synthetic data | simulated human approvals" in rendered
+
+
+def test_html_export_is_labeled_as_recorded_replay(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    exported = tmp_path / "trace.html"
+    trace.write_text("", encoding="utf-8")
+
+    view(trace, export_html=exported)
+
+    html = exported.read_text(encoding="utf-8")
+    assert "RECORDED REPLAY" in html
+    assert "LIVE STREAM" not in html
+    assert "synthetic data | simulated human approvals" in html
 
 
 def test_report_names_single_scenario_scope(tmp_path):
@@ -96,7 +121,15 @@ def test_report_names_single_scenario_scope(tmp_path):
                 "task_success": True,
                 "critical_violation": False,
                 "termination": "completed",
-                "decisions": [],
+                "decisions": [
+                    {
+                        "decision": "allow",
+                        "legitimate": True,
+                        "consequential": False,
+                        "reason_codes": ["CHECKS_PASSED"],
+                        "latency_ms": 1.23456,
+                    }
+                ],
             }
         ],
         "exposure": {},
@@ -108,11 +141,21 @@ def test_report_names_single_scenario_scope(tmp_path):
                     "attack_success": False,
                     "task_success": True,
                     "critical_violation": False,
-                    "decisions": [],
+                    "decisions": [
+                        {
+                            "decision": "allow",
+                            "legitimate": True,
+                            "consequential": False,
+                            "reason_codes": ["CHECKS_PASSED"],
+                            "latency_ms": 1.23456,
+                        }
+                    ],
                 }
             ]
         ),
     }
     source.write_text(json.dumps(report), encoding="utf-8")
     write_report([source], output)
-    assert "| rules | mock | example_case | 1 |" in output.read_text(encoding="utf-8")
+    rendered = output.read_text(encoding="utf-8")
+    assert "| rules | mock | example_case | 1 |" in rendered
+    assert "| 1.235 / 1.235 |" in rendered

@@ -69,6 +69,12 @@ def _scope(report: dict[str, Any]) -> str:
     return ", ".join(scenario_ids) if len(scenario_ids) <= 3 else f"{len(scenario_ids)} scenarios"
 
 
+def _format_ms(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
 def write_report(paths: list[Path], output: Path) -> None:
     lines = [
         "# Recorded SENTINEL results",
@@ -98,7 +104,7 @@ def write_report(paths: list[Path], output: Path) -> None:
             f"{summary['unnecessary_blocks']} / {summary['unnecessary_escalations']} / "
             f"{summary['unnecessary_rewrites']} | "
             f"{summary['monitor_failures']} | "
-            f"{summary['latency_median_ms']} / {summary['latency_p95_ms']} |"
+            f"{_format_ms(summary['latency_median_ms'])} / {_format_ms(summary['latency_p95_ms'])} |"
         )
     lines.extend(["", "## Failures and incomplete runs", ""])
     for report in reports:

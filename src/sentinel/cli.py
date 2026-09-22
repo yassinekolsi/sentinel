@@ -375,8 +375,8 @@ def _eval_command(split: str, default_path: Callable[[], Path]) -> Callable[...,
         attacker: Annotated[str, typer.Option(help="none | static | mutation")] = "static",
         attack_mode: Annotated[str, typer.Option(help="static | adaptive | none")] = "static",
         model: Annotated[
-        str, typer.Option(help="mock (default) | ollama:<tag> | qwen3-8b | a local HF model path")
-    ] = "mock",
+            str, typer.Option(help="mock (default) | ollama:<tag> | qwen3-8b | a local HF model path")
+        ] = "mock",
         artifacts: ArtifactsOpt = Path("artifacts"),
         config: ConfigOpt = None,
         output: Annotated[Path | None, typer.Option("--output", help="Also write the scorecard here.")] = None,
