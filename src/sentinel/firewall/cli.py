@@ -93,7 +93,7 @@ def execute(
     adaptive: bool,
     artifacts: Path,
 ) -> None:
-    from sentinel.firewall.reporting import summarize
+    from sentinel.firewall.reporting import exact_payload_observed, summarize
 
     store = ArtifactStore(artifacts)
     mode = "allow_all" if undefended else "hybrid" if semantic else "rules"
@@ -136,10 +136,11 @@ def execute(
             observed = [e for e in result.log.events if e.type.value in {"retrieval_result", "tool_result"}]
             payloads = [p.text for p in scenario.attack.payloads if p.text]
             exposure[scenario.id] = {
-                "exact_payload_observed": any(
-                    p in json.dumps(e.payload, ensure_ascii=False) for p in payloads for e in observed
+                "exact_payload_observed": exact_payload_observed(payloads, (e.payload for e in observed)),
+                "measurement": (
+                    "case-sensitive exact substring in recursive retrieval/tool-result strings; "
+                    "false may mean transformed/partial payload, not absence"
                 ),
-                "measurement": "exact payload match; false may mean transformed/partial payload, not absence",
                 "non_reference_action_proposed": any(not d.legitimate for d in result.outcome.decisions),
             }
             typer.echo(

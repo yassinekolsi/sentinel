@@ -21,6 +21,9 @@ def test_live_reader_tolerates_only_unfinished_last_line(tmp_path):
     path.write_text("{oops}\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Corrupt trace"):
         read_live(path)
+    path.write_text("42\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not an object"):
+        read_live(path)
 
 
 def test_presentation_redacts_plain_encoded_and_spaced_secrets():
@@ -36,6 +39,12 @@ def test_presentation_redacts_plain_encoded_and_spaced_secrets():
     assert secret not in rendered and " ".join(secret) not in rendered
     assert all(v not in rendered for v in variants(secret).values())
     assert events[0]["payload"]["token"] == secret
+
+
+def test_presentation_redacts_secrets_used_as_object_keys():
+    secret = "credential-object-key-9123AB"
+    events = [{"payload": {"token": secret, "nested": {secret: "value"}}}]
+    assert secret not in json.dumps(redact(events))
 
 
 def test_cascade_gate_needs_complete_pairs_and_no_new_unsafe_allow():
