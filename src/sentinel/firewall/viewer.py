@@ -6,7 +6,7 @@ import json
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from rich.console import Console, Group
 from rich.live import Live
@@ -66,7 +66,7 @@ def redact(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 value = pattern.sub("[redacted]", value)
         return value
 
-    return clean(events)
+    return cast(list[dict[str, Any]], clean(events))
 
 
 def render(

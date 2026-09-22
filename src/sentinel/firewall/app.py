@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ def create_app(
     engine = firewall or Firewall(LocalMonitor(model) if semantic else None, cascade=cascade, audit_dir=audit_dir)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
         engine.close()
 

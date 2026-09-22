@@ -6,6 +6,7 @@ import json
 import platform
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 import typer
@@ -36,7 +37,7 @@ def serve(semantic: bool = False, cascade: bool = False, model: str = "qwen3:8b"
 @app.command()
 def doctor() -> None:
     """Inspect the local runtime without downloading or invoking models."""
-    status = {"python": platform.python_version(), "platform": platform.platform(), "ollama": None}
+    status: dict[str, Any] = {"python": platform.python_version(), "platform": platform.platform(), "ollama": None}
     try:
         with httpx.Client(trust_env=False, timeout=5) as client:
             response = client.get("http://127.0.0.1:11434/api/tags")

@@ -119,7 +119,8 @@ def experiment(path: Path, model: str, output: Path) -> None:
                     json.dumps({"model": model, "rows": rows, "gate": gate(rows)}, indent=2), encoding="utf-8"
                 )
                 print(
-                    f"{case['id']} thinking={thinking} correct={row['correct']} latency={row['latency_s']} error={error}",
+                    f"{case['id']} thinking={thinking} correct={row['correct']} "
+                    f"latency={row['latency_s']} error={error}",
                     flush=True,
                 )
     finally:

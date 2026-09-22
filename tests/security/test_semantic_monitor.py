@@ -116,4 +116,3 @@ def test_http_service_exception_fails_closed(tmp_path):
         assert result.status_code == 200
         assert result.json()["decision"] == "block"
         assert result.json()["reason_codes"] == ["SERVICE_FAILURE"]
-
