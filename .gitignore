@@ -13,6 +13,7 @@ build/
 
 # Local outputs and configuration
 artifacts/
+reports/
 competition.yaml
 .env
 
