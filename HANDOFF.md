@@ -1,5 +1,8 @@
 # sentiel — current implementation handoff
 
+> Superseded by [WRAPUP.md](WRAPUP.md) after the repair session. The material below describes the
+> historical first submission and includes stale results and packaging claims. Use WRAPUP.md first.
+
 Updated: 22 September 2026, after the complete local evaluation and final validation pass.
 
 ## Continue from here
