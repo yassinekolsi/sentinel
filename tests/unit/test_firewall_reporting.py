@@ -3,7 +3,7 @@ import json
 
 from rich.console import Console
 
-from sentinel.firewall.reporting import exact_payload_observed, summarize
+from sentinel.firewall.reporting import exact_payload_observed, summarize, write_report
 from sentinel.firewall.viewer import render
 
 
@@ -80,3 +80,39 @@ def test_render_makes_rewrite_and_outcomes_visible_without_parsing_markup():
     assert "SUCCEEDED  tool=ticket_update" in rendered
     assert "TASK SUCCESS" in rendered
     assert "[bold red]literal markup[/bold red]" in rendered
+
+
+def test_report_names_single_scenario_scope(tmp_path):
+    source = tmp_path / "results.json"
+    output = tmp_path / "report.md"
+    report = {
+        "mode": "rules",
+        "model": "mock",
+        "outcomes": [
+            {
+                "scenario_id": "example_case",
+                "attack_present": False,
+                "attack_success": False,
+                "task_success": True,
+                "critical_violation": False,
+                "termination": "completed",
+                "decisions": [],
+            }
+        ],
+        "exposure": {},
+        "summary": summarize(
+            [
+                {
+                    "scenario_id": "example_case",
+                    "attack_present": False,
+                    "attack_success": False,
+                    "task_success": True,
+                    "critical_violation": False,
+                    "decisions": [],
+                }
+            ]
+        ),
+    }
+    source.write_text(json.dumps(report), encoding="utf-8")
+    write_report([source], output)
+    assert "| rules | mock | example_case | 1 |" in output.read_text(encoding="utf-8")

@@ -64,6 +64,11 @@ def _exposure_ratio(report: dict[str, Any]) -> str:
     return f"{exposed}/{len(measured)}" if measured else "n/a"
 
 
+def _scope(report: dict[str, Any]) -> str:
+    scenario_ids = [str(outcome["scenario_id"]) for outcome in report["outcomes"]]
+    return ", ".join(scenario_ids) if len(scenario_ids) <= 3 else f"{len(scenario_ids)} scenarios"
+
+
 def write_report(paths: list[Path], output: Path) -> None:
     lines = [
         "# Recorded SENTINEL results",
@@ -77,15 +82,15 @@ def write_report(paths: list[Path], output: Path) -> None:
         "exposure.",
         "Reference-plan mismatches are evaluator labels, not proof that an action was unsafe.",
         "",
-        "| Mode | Agent | Cases | Attack successes | Benign completed | Payload exposure | "
+        "| Mode | Agent | Scope | Cases | Attack successes | Benign completed | Payload exposure | "
         "Critical violations | Reference-plan block / escalate / rewrite | Monitor failures | Median / p95 ms |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     reports = [json.loads(p.read_text(encoding="utf-8")) for p in paths]
     for report in reports:
         summary = summarize(report["outcomes"])
         lines.append(
-            f"| {report['mode']} | {report['model']} | {summary['scenarios']} | "
+            f"| {report['mode']} | {report['model']} | {_scope(report)} | {summary['scenarios']} | "
             f"{summary['attack_successes']}/{summary['attacks']} | "
             f"{summary['benign_completed']}/{summary['benign']} | "
             f"{_exposure_ratio(report)} | "
