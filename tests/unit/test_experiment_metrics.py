@@ -153,25 +153,26 @@ def test_monitor_caches_success_for_exact_input_without_run_identifiers():
     monitor.close()
 
 
-def test_monitor_caches_failure_and_preserves_category():
+def test_monitor_does_not_cache_temporary_failure_and_can_recover():
     calls = 0
 
-    def timeout(request):
+    def timeout_then_succeed(request):
         nonlocal calls
         calls += 1
-        raise httpx.ReadTimeout("slow", request=request)
+        if calls == 1:
+            raise httpx.ReadTimeout("slow", request=request)
+        return httpx.Response(200, json={"done": True, "message": {"content": json.dumps(judgment())}})
 
-    monitor = LocalMonitor(transport=httpx.MockTransport(timeout))
+    monitor = LocalMonitor(transport=httpx.MockTransport(timeout_then_succeed))
     request = defense_request(CandidateAction(type=ActionType.RESPOND, content="Summary"))
     with pytest.raises(MonitorError) as first:
         monitor.assess(request, SecurityState(), thinking=False)
     assert monitor.last_stats["cache_hit"] is False
-    with pytest.raises(MonitorError) as second:
-        monitor.assess(request, SecurityState(), thinking=False)
-    assert monitor.last_stats["cache_hit"] is True
-    assert first.value.category is second.value.category is MonitorFailureCategory.TIMEOUT
-    assert str(first.value) == str(second.value)
-    assert calls == 1
+    second = monitor.assess(request, SecurityState(), thinking=False)
+    assert monitor.last_stats["cache_hit"] is False
+    assert first.value.category is MonitorFailureCategory.TIMEOUT
+    assert second.authorized == "yes"
+    assert calls == 2
     monitor.close()
 
 

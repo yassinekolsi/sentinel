@@ -55,6 +55,9 @@ class DefenseRequest(_Strict):
     """Everything a defense may see. Never contains reference plans, labels, or attack payloads."""
 
     run_id: str
+    # A fresh opaque lifecycle identity. Older clients may omit it; the firewall
+    # then falls back to run_id for backward-compatible request parsing.
+    execution_id: str | None = None
     step_id: int
     user_goal: str
     conversation: list[ConversationItem] = Field(default_factory=list)

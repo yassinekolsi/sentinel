@@ -39,8 +39,10 @@ class OllamaModelAdapter(ModelAdapter):
         enable_thinking: bool = False,
         timeout_s: float = 180.0,
         transport: httpx.BaseTransport | None = None,
+        seed: int = 0,
     ) -> None:
         self._model = model
+        self._seed = seed
         self._client = httpx.Client(
             base_url=(host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/"),
             timeout=timeout_s,
@@ -74,7 +76,7 @@ class OllamaModelAdapter(ModelAdapter):
             "think": self._enable_thinking,
             # temperature 0 so a rerun of the same scenario produces the same trace
             "keep_alive": "30m",
-            "options": {"temperature": 0, "num_ctx": 4096, "num_predict": self._max_new_tokens},
+            "options": {"temperature": 0, "seed": self._seed, "num_ctx": 4096, "num_predict": self._max_new_tokens},
         }
         try:
             response = self._client.post("/api/chat", json=payload)

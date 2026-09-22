@@ -49,7 +49,7 @@ def test_heuristic_escalates_unconfirmed_consequential_and_blocks_unlisted() -> 
     send = defense_request(tool_call("email_send", to="a@partner.example", subject="s", body="b"))
     assert heuristic.decide(send).decision is Decision.ESCALATE
     confirmed = defense_request(
-        send.candidate_action, history_digest={"confirmations_granted": [send.candidate_action.digest()]}
+        send.candidate_action, history_digest={"confirmations_granted": [send.candidate_action.approval_digest()]}
     )
     assert heuristic.decide(confirmed).decision is Decision.ALLOW
     unlisted = defense_request(

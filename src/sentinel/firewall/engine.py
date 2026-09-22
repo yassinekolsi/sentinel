@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,11 +20,19 @@ from sentinel.tools.registry import registry_for_domain
 class Firewall(Defense):
     name = "sentiel_rules"
 
-    def __init__(self, monitor: Any = None, *, cascade: bool = False, audit_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        monitor: Any = None,
+        *,
+        cascade: bool = False,
+        audit_dir: Path | None = None,
+        semantic_deadline_s: float = 90.0,
+    ) -> None:
         self.monitor = monitor
         self.cascade = cascade
         self.name = "sentiel_hybrid" if monitor else "sentiel_rules"
         self.audit_dir = audit_dir
+        self.semantic_deadline_s = semantic_deadline_s
         self.states: dict[str, SecurityState] = {}
         self.cache: dict[tuple[str, int], tuple[str, DefenseDecision]] = {}
         self.lock = threading.RLock()
@@ -73,6 +82,39 @@ class Firewall(Defense):
         tool = self.tools.get(action.tool or "")
         return action.type is ActionType.TOOL_CALL and bool(tool and tool.capabilities == frozenset({"read"}))
 
+    def destination(self, request: DefenseRequest, action: CandidateAction) -> tuple[str, bool]:
+        """Classify a sink from trusted action/tool metadata, never from observed text."""
+        if action.type is ActionType.RESPOND:
+            return "user_response", False
+        if action.type is ActionType.MEMORY_WRITE:
+            return "memory", False
+        if action.type is not ActionType.TOOL_CALL:
+            return "unknown", True
+        if self.is_read(action):
+            return "read", False
+        domains = request.policy_context.get("internal_email_domains", [])
+        recipient = str(action.arguments.get("to", "")).lower()
+        internal = bool(recipient and any(recipient.endswith("@" + str(domain).lower()) for domain in domains))
+        if action.tool in {"email_send", "email_draft"}:
+            return ("internal_email" if internal else "external_email"), not internal
+        if action.tool in {"ticket_update", "incident_update", "case_note_create", "incident_create"}:
+            return "internal_note", False
+        # Unknown write destinations do not get an unconditional allow when
+        # protected text is present.
+        return "unknown_write", True
+
+    @staticmethod
+    def disclosure_allowed(request: DefenseRequest, destination: str, kind: str) -> bool:
+        permissions = request.policy_context.get("public_disclosure_permissions", [])
+        if not isinstance(permissions, list):
+            return False
+        return any(
+            isinstance(permission, dict)
+            and permission.get("destination") in {destination, "*"}
+            and permission.get("kind") in {kind, "*"}
+            for permission in permissions
+        )
+
     def structural(
         self, request: DefenseRequest, action: CandidateAction, state: SecurityState
     ) -> DefenseDecision | None:
@@ -89,18 +131,26 @@ class Firewall(Defense):
                     Decision.BLOCK, "INVALID_ARGUMENTS", risk=1, explanation="Tool arguments fail its schema."
                 )
         # Reads are not exempt from secret-bearing query checks.
-        domains = request.policy_context.get("internal_email_domains", [])
-        to = str(action.arguments.get("to", "")).lower()
-        internal = bool(to and any(to.endswith("@" + str(d).lower()) for d in domains))
-        external = action.tool in {"email_send", "email_draft"} and not internal
-        leaks = state.leaks(action.text_payload(), external=external)
+        destination, external = self.destination(request, action)
+        leaks = state.leaks(
+            action.text_payload(),
+            external=external,
+            allow_confidential=self.disclosure_allowed(request, destination, "confidential"),
+            allow_credentials=self.disclosure_allowed(request, destination, "credential"),
+        )
         if leaks:
+            capacity_only = all(leak["kind"] == "analysis_capacity" for leak in leaks)
             return self.result(
                 Decision.BLOCK,
-                "SENSITIVE_DATA_FLOW",
+                "ANALYSIS_CAPACITY_EXCEEDED" if capacity_only else "SENSITIVE_DATA_FLOW",
                 risk=1,
-                explanation="Observed sensitive value crosses an unauthorized output boundary.",
-                metadata={"leaks": leaks[:4]},
+                confidence=0 if capacity_only else 1,
+                explanation=(
+                    "Container analysis budget was exhausted; disclosure status is unresolved."
+                    if capacity_only
+                    else "Observed protected value crosses an unauthorized output boundary."
+                ),
+                metadata={"leaks": leaks[:4], "destination": destination},
             )
         transitions = {
             "payment_confirm": ("payment_id", "prepared"),
@@ -147,7 +197,8 @@ class Firewall(Defense):
     def decide(self, request: DefenseRequest) -> DefenseDecision:
         with self.lock:
             fingerprint = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
-            cache_key = (request.run_id, request.step_id)
+            scope = request.execution_id or request.run_id
+            cache_key = (scope, request.step_id)
             cached = self.cache.get(cache_key)
             if cached:
                 return (
@@ -158,13 +209,21 @@ class Firewall(Defense):
                     )
                 )
             try:
-                if request.run_id not in self.states and len(self.states) >= 256:
+                if scope not in self.states and len(self.states) >= 256:
                     return self.result(Decision.BLOCK, "RUN_CAPACITY_EXCEEDED", risk=1)
-                state = self.states.setdefault(request.run_id, SecurityState())
+                state = self.states.setdefault(scope, SecurityState())
                 if request.step_id <= state.last_step:
                     return self.result(Decision.BLOCK, "OUT_OF_ORDER_STEP", risk=1)
                 state.ingest(request)
-                decision = self._decide(request, state)
+                begin = getattr(self.monitor, "begin_decision", None)
+                end = getattr(self.monitor, "end_decision", None)
+                if begin:
+                    begin(time.monotonic() + self.semantic_deadline_s)
+                try:
+                    decision = self._decide(request, state)
+                finally:
+                    if end:
+                        end()
                 if decision.decision in {Decision.ALLOW, Decision.ESCALATE, Decision.REWRITE}:
                     effective = decision.rewritten_action or request.candidate_action
                     if effective.type is ActionType.TOOL_CALL:
@@ -213,7 +272,10 @@ class Firewall(Defense):
                     return result.model_copy(update={"metadata": {**result.metadata, **semantic_metadata}})
             except Exception as exc:
                 return self.uncertain(request, action, "MONITOR_FAILURE_" + type(exc).__name__.upper()[:35])
-        if self.consequential(request, action) and action.digest() not in request.history_digest.confirmations_granted:
+        if (
+            self.consequential(request, action)
+            and action.approval_digest() not in request.history_digest.confirmations_granted
+        ):
             if candidate.type is ActionType.REQUEST_CONFIRMATION:
                 return self.result(
                     Decision.ALLOW,
@@ -276,9 +338,10 @@ class Firewall(Defense):
         if self.audit_dir is None:
             return
         self.audit_dir.mkdir(parents=True, exist_ok=True)
-        name = hashlib.sha256(request.run_id.encode()).hexdigest()[:24]
+        name = hashlib.sha256((request.execution_id or request.run_id).encode()).hexdigest()[:24]
         record = {
             "run_id": request.run_id,
+            "execution_id": request.execution_id,
             "step_id": request.step_id,
             "candidate": request.candidate_action.model_dump(mode="json"),
             "decision": decision.model_dump(mode="json"),

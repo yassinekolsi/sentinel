@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,6 +16,7 @@ from sentinel.defenses.interface import DefenseRequest
 
 SECRET_KEY = re.compile(r"password|secret|token|credential|api[_ -]?key|recovery[_ -]?key", re.I)
 IDENTIFIER_KEY = re.compile(r"iban|account_number|national_id", re.I)
+STRUCTURAL_KEY = re.compile(r"(^id$|_id$|timestamp|created_at|updated_at|date$|time$)", re.I)
 LABELED_SECRET = re.compile(
     r"(?:password|token|secret|credential|api[_ -]?key)\s*(?:is|:|=)\s*['\"]?([\w+/.=\-]{8,})", re.I
 )
@@ -23,6 +25,42 @@ BASE64_TOKEN = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 HEX_TOKEN = re.compile(r"(?:[0-9a-fA-F]{2}){8,}")
 MAX_DECODE_TOKENS = 128
 MAX_DECODED_CHARS = 262_144
+GENERIC_ENUMS = {
+    "active",
+    "approved",
+    "closed",
+    "complete",
+    "completed",
+    "confirmed",
+    "disabled",
+    "enabled",
+    "executed",
+    "failed",
+    "false",
+    "open",
+    "pending",
+    "prepared",
+    "resolved",
+    "true",
+}
+
+
+def normalized_text(value: str) -> str:
+    """Normalize copied prose without changing its words or order."""
+    return " ".join(unicodedata.normalize("NFC", value).casefold().split())
+
+
+def protected_candidates(value: str) -> list[tuple[str, str]]:
+    """Return full text plus bounded eight-word spans for copied-excerpt checks."""
+    normalized = normalized_text(value)
+    words = normalized.split()
+    candidates = [("plain", value)]
+    if normalized != value:
+        candidates.append(("normalized", normalized))
+    if len(words) >= 8:
+        candidates.extend(("excerpt", " ".join(words[index : index + 8])) for index in range(len(words) - 7))
+    # Preserve order while bounding duplicate work.
+    return list(dict.fromkeys(candidates))
 
 
 def variants(value: str) -> dict[str, str]:
@@ -99,6 +137,9 @@ class SensitiveValue:
     value: str
     credential: bool
     evidence_ids: set[str] = field(default_factory=set)
+    sensitivity: str = "confidential"
+    source_trust: str = "unknown"
+    field_paths: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -167,58 +208,94 @@ class SecurityState:
         self.last_step = request.step_id
 
     def _extract(self, evidence: Evidence) -> None:
-        def remember(value: str, credential: bool) -> None:
-            if len(value) < 8 or len(value) > 512:
+        def remember(value: str, credential: bool, path: str) -> None:
+            value = value.strip()
+            if len(value) < 4 or normalized_text(value) in GENERIC_ENUMS:
+                return
+            if len(value) > 16_000:
+                self.overflow = True
                 return
             if len(self.sensitive) >= 1000 and value not in self.sensitive:
                 self.overflow = True
                 return
-            entry = self.sensitive.setdefault(value, SensitiveValue(value, credential))
+            entry = self.sensitive.setdefault(
+                value,
+                SensitiveValue(
+                    value,
+                    credential,
+                    sensitivity=evidence.sensitivity,
+                    source_trust=evidence.trust,
+                ),
+            )
             entry.credential |= credential
+            entry.field_paths.add(path or "$")
             entry.evidence_ids.add(evidence.id)
 
-        def walk(value: Any, key: str = "") -> None:
+        def walk(value: Any, key: str = "", path: str = "$") -> None:
             if isinstance(value, dict):
                 for name, child in value.items():
-                    walk(child, name)
+                    walk(child, name, f"{path}.{name}")
             elif isinstance(value, list):
-                for child in value:
-                    walk(child, key)
+                for index, child in enumerate(value):
+                    walk(child, key, f"{path}[{index}]")
             elif isinstance(value, str):
                 if SECRET_KEY.search(key) and len(value.split()) == 1:
-                    remember(value, True)
+                    remember(value, True, path)
                 elif IDENTIFIER_KEY.search(key):
-                    remember(value, False)
+                    remember(value, False, path)
+                elif not STRUCTURAL_KEY.search(key):
+                    # Field names are retained only as diagnostics; sensitivity and
+                    # observed provenance, not names, establish protection.
+                    remember(value, False, path)
                 for match in LABELED_SECRET.finditer(value):
-                    remember(match.group(1), True)
+                    remember(match.group(1), True, path)
                 if evidence.sensitivity == "restricted":
                     for match in OPAQUE.finditer(value):
-                        remember(match.group(), True)
+                        remember(match.group(), True, path)
 
         try:
             walk(json.loads(evidence.content))
         except ValueError:
             walk(evidence.content)
 
-    def leaks(self, payload: str, external: bool) -> list[dict[str, Any]]:
+    def leaks(
+        self,
+        payload: str,
+        external: bool,
+        *,
+        allow_confidential: bool = False,
+        allow_credentials: bool = False,
+    ) -> list[dict[str, Any]]:
         findings = []
         decoded, exhausted = decoded_payloads(payload)
         for entry in self.sensitive.values():
-            encoding = match_encoding(entry.value, payload)
-            if encoding is None:
+            encoding = None
+            for candidate_kind, candidate in protected_candidates(entry.value):
+                direct = match_encoding(candidate, payload)
+                if direct:
+                    encoding = direct if candidate_kind == "plain" else f"{candidate_kind}:{direct}"
+                    break
                 for container_encoding, content in decoded:
-                    inner_encoding = match_encoding(entry.value, content)
+                    inner_encoding = match_encoding(candidate, content)
                     if inner_encoding:
-                        encoding = f"{container_encoding}:{inner_encoding}"
+                        encoding = f"{container_encoding}:{candidate_kind}:{inner_encoding}"
                         break
-            if encoding and (entry.credential or external):
+                if encoding:
+                    break
+            prohibited = (entry.credential and not allow_credentials) or (
+                not entry.credential and external and not allow_confidential
+            )
+            if encoding and prohibited:
                 evidence_ids = sorted(entry.evidence_ids)
                 findings.append(
                     {
                         "encoding": encoding,
                         "evidence_ids": evidence_ids[:8],
                         "evidence_ids_omitted": max(0, len(evidence_ids) - 8),
-                        "kind": "credential" if entry.credential else "identifier",
+                        "kind": "credential" if entry.credential else "protected_value",
+                        "sensitivity": entry.sensitivity,
+                        "source_trust": entry.source_trust,
+                        "field_paths": sorted(entry.field_paths)[:8],
                     }
                 )
         if exhausted and self.sensitive:

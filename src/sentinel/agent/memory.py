@@ -15,6 +15,7 @@ class MemoryEntry:
     entry_id: str
     content: str
     trust_level: TrustLevel
+    sensitivity: Sensitivity
     written_at_step: int
 
 
@@ -22,10 +23,16 @@ class AgentMemory:
     def __init__(self, state: WorldState) -> None:
         self._state = state
 
-    def write(self, content: str, trust_level: TrustLevel, step_id: int) -> MemoryEntry:
-        meta = RecordMeta(SourceType.MEMORY, trust_level, "agent_memory", Sensitivity.INTERNAL)
+    def write(
+        self,
+        content: str,
+        trust_level: TrustLevel,
+        step_id: int,
+        sensitivity: Sensitivity = Sensitivity.INTERNAL,
+    ) -> MemoryEntry:
+        meta = RecordMeta(SourceType.MEMORY, trust_level, "agent_memory", sensitivity)
         entry_id = self._state.insert(MEMORY_COLLECTION, "MEM", {"content": content, "written_at_step": step_id}, meta)
-        return MemoryEntry(entry_id, content, trust_level, step_id)
+        return MemoryEntry(entry_id, content, trust_level, sensitivity, step_id)
 
     def recall(self) -> list[MemoryEntry]:
         entries = []
@@ -36,6 +43,7 @@ class AgentMemory:
                     entry_id=str(record["id"]),
                     content=str(record["content"]),
                     trust_level=meta.trust_level,
+                    sensitivity=meta.sensitivity,
                     written_at_step=int(record.get("written_at_step", 0)),
                 )
             )

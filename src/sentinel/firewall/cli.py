@@ -58,9 +58,10 @@ def run(
     undefended: bool = False,
     adaptive: bool = False,
     artifacts: Path = Path("artifacts"),
+    seed: int = 0,
 ) -> None:
     """Run one scenario, writing both a live stream and immutable final evidence."""
-    execute([scenario], model, semantic, cascade, monitor_model, undefended, adaptive, artifacts)
+    execute([scenario], model, semantic, cascade, monitor_model, undefended, adaptive, artifacts, seed)
 
 
 @app.command()
@@ -73,6 +74,7 @@ def evaluate(
     undefended: bool = False,
     adaptive: bool = False,
     artifacts: Path = Path("artifacts"),
+    seed: int = 0,
 ) -> None:
     """Evaluate a suite. Labels are used only after decisions, never by the defense."""
     from sentinel.core.scenario import discover_scenarios
@@ -80,7 +82,7 @@ def evaluate(
     paths = discover_scenarios(scenarios)
     if not paths:
         raise typer.BadParameter("no scenarios found")
-    execute(paths, model, semantic, cascade, monitor_model, undefended, adaptive, artifacts)
+    execute(paths, model, semantic, cascade, monitor_model, undefended, adaptive, artifacts, seed)
 
 
 def execute(
@@ -92,8 +94,11 @@ def execute(
     undefended: bool,
     adaptive: bool,
     artifacts: Path,
+    seed: int = 0,
 ) -> None:
+    from sentinel.firewall.manifest import new_manifest, save_manifest, sha256
     from sentinel.firewall.reporting import exact_payload_observed, summarize
+    from sentinel.models.ollama_adapter import OllamaModelAdapter
 
     store = ArtifactStore(artifacts)
     mode = "allow_all" if undefended else "hybrid" if semantic else "rules"
@@ -104,7 +109,22 @@ def execute(
     typer.echo(f"live trace: {live_path}")
     outcomes = []
     exposure = {}
-    competition = load_competition(find_root() / "configs/local.yaml")
+    competition = load_competition(find_root() / "configs/local.yaml").model_copy(update={"run_seed": seed})
+    manifest = new_manifest(
+        find_root(),
+        {
+            "competition": competition.model_dump(mode="json"),
+            "model": model,
+            "mode": mode,
+            "monitor_model": monitor_model if semantic else None,
+            "cascade": cascade,
+            "adaptive": adaptive,
+            "seed": seed,
+            "agent_options": {"thinking": False, "temperature": 0, "num_ctx": 4096, "num_predict": 768},
+        },
+        runtime=model != "mock" or semantic,
+    )
+    save_manifest(directory, manifest)
 
     def append_event(event: Event) -> None:
         with live_path.open("a", encoding="utf-8") as handle:
@@ -114,7 +134,9 @@ def execute(
         root=find_root(),
         competition=competition,
         attack_mode=AttackMode.ADAPTIVE if adaptive else AttackMode.STATIC,
-        model_factory=_model_factory(model),
+        model_factory=(lambda: OllamaModelAdapter(model=model.split(":", 1)[1], seed=seed))
+        if model.startswith("ollama:")
+        else _model_factory(model),
         include_reference_plan=(model == "mock"),
         artifacts=store,
         artifact_group=group,
@@ -132,6 +154,16 @@ def execute(
         try:
             result = run_scenario(scenario, defense, config)
             outcomes.append(result.outcome.model_dump(mode="json"))
+            manifest["runs"].append(
+                {
+                    "scenario_file": str(path),
+                    "scenario_sha256": sha256(path),
+                    "scenario_seed": scenario.seed,
+                    "run_seed": seed,
+                    "execution_id": result.execution_id,
+                    "run_id": result.outcome.run_id,
+                }
+            )
             # Evaluator-side exposure measurement. Never supplied to the defense.
             observed = [e for e in result.log.events if e.type.value in {"retrieval_result", "tool_result"}]
             payloads = [p.text for p in scenario.attack.payloads if p.text]
@@ -160,6 +192,7 @@ def execute(
             "summary": summarize(outcomes),
         }
         (directory / "results.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        save_manifest(directory, manifest)
     typer.echo(json.dumps(report["summary"], indent=2))
     typer.echo(f"results: {directory / 'results.json'}")
 

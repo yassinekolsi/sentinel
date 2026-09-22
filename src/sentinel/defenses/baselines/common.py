@@ -47,7 +47,7 @@ def is_consequential(request: DefenseRequest, action: CandidateAction) -> bool:
 
 
 def is_confirmed(request: DefenseRequest, action: CandidateAction) -> bool:
-    return action.digest() in request.history_digest.confirmations_granted
+    return action.approval_digest() in request.history_digest.confirmations_granted
 
 
 def is_external_recipient(request: DefenseRequest, action: CandidateAction) -> bool:

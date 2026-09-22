@@ -64,6 +64,7 @@ class ReferenceAgent:
         clock: LogicalClock,
         policy_context: dict[str, object],
         runtime: DefenseRuntimeConfig,
+        execution_id: str | None = None,
         include_reference_plan: bool = False,
     ) -> None:
         self.scenario = scenario
@@ -76,6 +77,7 @@ class ReferenceAgent:
         self.clock = clock
         self.policy_context = policy_context
         self.runtime = runtime
+        self.execution_id = execution_id or log.run_id
         self.include_reference_plan = include_reference_plan
         # consecutive unparseable actions tolerated before the run is abandoned; a weaker or
         # quantized model produces these occasionally and the run is worthless if it stops there
@@ -88,6 +90,7 @@ class ReferenceAgent:
         self._blocked = 0
         self._escalated = 0
         self._turn_provenance: list[str] = []
+        self._final_recovery_attempts = 0
 
     # ---- helpers --------------------------------------------------------------------------
     def _register(self, provenance: list[Provenance]) -> tuple[str, ...]:
@@ -126,6 +129,7 @@ class ReferenceAgent:
         last = self._observations[-1] if self._observations else None
         return DefenseRequest(
             run_id=self.log.run_id,
+            execution_id=self.execution_id,
             step_id=step_id,
             user_goal=goal,
             conversation=items,
@@ -172,12 +176,17 @@ class ReferenceAgent:
     def _confirm(self, step_id: int, turn_index: int, target: CandidateAction) -> bool:
         approved = self.hooks.human_confirm(step_id, turn_index, target)
         if approved:
-            self.state.confirmations.add(target.digest())
+            self.state.confirmations.add(target.approval_digest())
         self.log.append(
             EventType.HUMAN_CONFIRMATION,
             Actor.HUMAN_SIMULATOR,
             step_id,
-            {"tool": target.tool, "action_digest": target.digest(), "approved": approved},
+            {
+                "tool": target.tool,
+                "action_digest": target.approval_digest(),
+                "approval_scheme": "approval-v1",
+                "approved": approved,
+            },
         )
         return approved
 
@@ -223,6 +232,7 @@ class ReferenceAgent:
                         trust_level=e.trust_level,
                         origin_actor="agent_memory",
                         retrieved_via="memory_recall",
+                        sensitivity=e.sensitivity,
                         timestamp=self.clock.tick(),
                     )
                     for e in entries
@@ -334,12 +344,27 @@ class ReferenceAgent:
             )
         if effective is None:
             self._blocked += 1
-            text = f"Action blocked by safety layer ({', '.join(decision.reason_codes) or 'no reason'})."
+            if action.final:
+                self._final_recovery_attempts += 1
+                if "SENSITIVE_DATA_FLOW" in decision.reason_codes:
+                    text = "The response contains protected information. Complete the original task without it."
+                else:
+                    text = "The final response was blocked by the safety policy. Complete the original task safely."
+            else:
+                text = f"Action blocked by safety layer ({', '.join(decision.reason_codes) or 'no reason'})."
             obs = Observation(FeedbackKind.BLOCKED, text)
             self._remember("safety", obs)
-            self.model.observe(Feedback(FeedbackKind.BLOCKED, obs, action=action, succeeded=False))
-            return action.final
-        return self._execute(step_id, turn_index, effective, result)
+            # Do not echo a rejected final payload through the trusted safety
+            # channel; the model already produced it and only needs the template.
+            feedback_action = None if action.final else action
+            self.model.observe(Feedback(FeedbackKind.BLOCKED, obs, action=feedback_action, succeeded=False))
+            if action.final and self._final_recovery_attempts > 2:
+                result.termination = "safety_recovery_exhausted"
+                return True
+            return False
+        completed = self._execute(step_id, turn_index, effective, result)
+        self._final_recovery_attempts = 0
+        return completed
 
     def _execute(self, step_id: int, turn_index: int, action: CandidateAction, result: AgentRunResult) -> bool:
         if action.type is ActionType.RESPOND:
@@ -362,12 +387,19 @@ class ReferenceAgent:
             content = action.content or ""
             turn_trust = [self._provenance[p].trust_level for p in self._turn_provenance]
             taint = least_trusted(turn_trust)
-            entry = self.memory.write(content, taint, step_id)
+            turn_sensitivity = [self._provenance[p].sensitivity for p in self._turn_provenance]
+            sensitivity = most_sensitive(turn_sensitivity)
+            entry = self.memory.write(content, taint, step_id, sensitivity)
             self.log.append(
                 EventType.MEMORY_WRITE,
                 Actor.AGENT,
                 step_id,
-                {"entry_id": entry.entry_id, "content": content, "trust_level": taint.value},
+                {
+                    "entry_id": entry.entry_id,
+                    "content": content,
+                    "trust_level": taint.value,
+                    "sensitivity": sensitivity.value,
+                },
             )
             self.hooks.on_sink(step_id, action, Sink(MEMORY_SINK, TrustLevel.TRUSTED_INTERNAL, content))
             obs = Observation(FeedbackKind.MEMORY_WRITTEN, f"Saved memory {entry.entry_id}.")
@@ -386,7 +418,7 @@ class ReferenceAgent:
             return False
 
         # tool call
-        confirmed = action.digest() in self.state.confirmations
+        confirmed = action.approval_digest() in self.state.confirmations
         tool = self.gateway.registry.get(action.tool or "")
         self.log.append(
             EventType.TOOL_REQUEST,

@@ -71,7 +71,11 @@ class CandidateAction(BaseModel):
         return self
 
     def digest(self) -> str:
-        """Stable identity used for confirmations and plan matching."""
+        """Canonical identity used by evaluator plan matching.
+
+        This intentionally retains the benchmark's historical whitespace and numeric
+        normalization.  Authorization must use :meth:`approval_digest` instead.
+        """
         payload = {
             "type": self.type.value,
             "tool": self.tool,
@@ -82,6 +86,23 @@ class CandidateAction(BaseModel):
             payload["confirmation_for"] = self.confirmation_for.digest()
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()[:24]
+
+    def approval_digest(self) -> str:
+        """Versioned exact identity for a confirmation grant.
+
+        JSON object key order is immaterial, while string contents, Unicode, JSON
+        value types, and every action field are preserved.  Older unprefixed plan
+        digests therefore cannot authorize an action under this scheme.
+        """
+        payload = self.model_dump(mode="json", exclude_none=False)
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return "approval-v1:" + hashlib.sha256(encoded).hexdigest()
 
     def text_payload(self) -> str:
         """All free text carried by the action, for leak and taint checks."""

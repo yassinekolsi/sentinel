@@ -46,6 +46,37 @@ def test_digest_is_canonical() -> None:
     assert a.digest() != c.digest()
 
 
+def test_approval_digest_binds_exact_typed_payload() -> None:
+    base = tool_call(
+        "payment_prepare",
+        account_id="ACC-1",
+        beneficiary_id="BEN-1",
+        amount=42,
+        reference="line one\nline two",
+    )
+    reordered = tool_call(
+        "payment_prepare",
+        reference="line one\nline two",
+        amount=42,
+        beneficiary_id="BEN-1",
+        account_id="ACC-1",
+    )
+    assert base.approval_digest() == reordered.approval_digest()
+    assert base.approval_digest().startswith("approval-v1:")
+    assert base.approval_digest() != base.digest()
+    mutations = [
+        {**base.arguments, "reference": "line one line two"},
+        {**base.arguments, "account_id": "ACC-2"},
+        {**base.arguments, "beneficiary_id": "BEN-2"},
+        {**base.arguments, "amount": 42.0},
+        {**base.arguments, "reference": "líne one\nline two"},
+    ]
+    assert all(
+        base.approval_digest() != base.model_copy(update={"arguments": arguments}).approval_digest()
+        for arguments in mutations
+    )
+
+
 def test_decision_validation() -> None:
     DefenseDecision(decision=Decision.ALLOW, risk_score=0.2, confidence=0.9, reason_codes=["OK_CODE"])
     with pytest.raises(ValidationError):

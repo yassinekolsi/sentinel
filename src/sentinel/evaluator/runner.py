@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -68,6 +69,7 @@ class ScenarioRun:
     log: EventLog
     agent_result: AgentRunResult
     artifact: Path | None = None
+    execution_id: str = ""
 
 
 class EvaluationHooks:
@@ -275,6 +277,7 @@ def run_scenario(
         attacker = StaticAttacker()  # attacks are on unless explicitly disabled with AttackMode.NONE
     seed = child_seed(scenario.seed, "run", competition.run_seed)
     run_id = sanitize_id(f"{scenario.id}-{defense.name}-s{competition.run_seed}")
+    execution_id = str(uuid.uuid4())
     state = WorldState.from_scenario(scenario, config.root, competition.run_seed)
     clock = LogicalClock(seed)
     log = EventLog(run_id, clock, sink=config.event_sink)
@@ -300,6 +303,7 @@ def run_scenario(
         clock=clock,
         policy_context=policy_context,
         runtime=competition.defense,
+        execution_id=execution_id,
         include_reference_plan=config.include_reference_plan,
     )
     agent_result = agent.run()
@@ -345,7 +349,9 @@ def run_scenario(
     if config.artifacts is not None:
         artifact = config.artifacts.write_events(config.artifact_group, run_id, log.events)
         config.artifacts.write_json(config.artifact_group, f"{run_id}.summary", outcome.model_dump(mode="json"))
-    return ScenarioRun(outcome=outcome, log=log, agent_result=agent_result, artifact=artifact)
+    return ScenarioRun(
+        outcome=outcome, log=log, agent_result=agent_result, artifact=artifact, execution_id=execution_id
+    )
 
 
 # ---- suites -----------------------------------------------------------------------------------
