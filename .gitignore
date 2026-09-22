@@ -25,3 +25,5 @@ presentation-assets/
 
 .deck-build/
 .deck-notes-build/
+.runtime/
+*.zip

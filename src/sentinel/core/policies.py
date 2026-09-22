@@ -260,7 +260,7 @@ class PolicyEngine:
                 name for name, tool in tools.items() if getattr(tool, "consequential", False)
             ),
             "rules": [
-                {"id": rule.id, "kind": rule.kind, "severity": rule.severity.value, "description": rule.description}
+                rule.model_dump(mode="json")
                 for rule in self.policy.rules
             ],
         }
