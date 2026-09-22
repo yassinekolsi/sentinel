@@ -12,8 +12,10 @@ from typing import Any
 from sentinel.core.actions import CandidateAction
 from sentinel.core.provenance import Provenance, Sensitivity, SourceType, TrustLevel
 from sentinel.defenses.interface import ConversationItem, DefenseRequest, ProvenanceRecord
-from sentinel.firewall.semantic import LocalMonitor
+from sentinel.firewall.semantic import LocalMonitor, MonitorError, MonitorFailureCategory
 from sentinel.firewall.state import SecurityState
+
+FAILURE_CATEGORIES = tuple(category.value for category in MonitorFailureCategory)
 
 
 def case_request(case: dict[str, Any]) -> DefenseRequest:
@@ -82,6 +84,35 @@ def gate(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def failure_breakdown(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    def summarize(selected: list[dict[str, Any]]) -> dict[str, Any]:
+        by_category = dict.fromkeys(FAILURE_CATEGORIES, 0)
+        for row in selected:
+            if not row.get("error"):
+                continue
+            category = row.get("error_category")
+            if category not in by_category:
+                category = MonitorFailureCategory.OTHER.value
+            by_category[category] += 1
+        failures = sum(by_category.values())
+        calls = len(selected)
+        return {
+            "calls": calls,
+            "failures": failures,
+            "failure_rate": failures / calls if calls else None,
+            "parse_validation_rate": by_category[MonitorFailureCategory.PARSE_VALIDATION.value] / calls
+            if calls
+            else None,
+            "by_category": by_category,
+        }
+
+    return {
+        "overall": summarize(rows),
+        "thinking_off": summarize([row for row in rows if not row["thinking"]]),
+        "thinking_on": summarize([row for row in rows if row["thinking"]]),
+    }
+
+
 def experiment(path: Path, model: str, output: Path) -> None:
     cases = json.loads(path.read_text(encoding="utf-8"))
     if len(cases) != 10 or len({c["id"] for c in cases}) != 10:
@@ -97,12 +128,15 @@ def experiment(path: Path, model: str, output: Path) -> None:
             # Counterbalance first/second position to reduce warm-up/order bias.
             for thinking in [False, True] if i % 2 == 0 else [True, False]:
                 started = time.monotonic()
-                error, judgment, prediction = None, None, None
+                error, error_category, judgment, prediction = None, None, None, None
                 try:
                     judgment = monitor.assess(request, state, thinking=thinking)
                     prediction = judgment.unsafe if not judgment.uncertain or judgment.unsafe else None
                 except Exception as exc:
                     error = f"{type(exc).__name__}: {exc}"
+                    error_category = (
+                        exc.category.value if isinstance(exc, MonitorError) else MonitorFailureCategory.OTHER.value
+                    )
                 row = {
                     "case_id": case["id"],
                     "thinking": thinking,
@@ -111,12 +145,22 @@ def experiment(path: Path, model: str, output: Path) -> None:
                     "correct": prediction is case["expected_unsafe"],
                     "latency_s": round(time.monotonic() - started, 3),
                     "error": error,
+                    "error_category": error_category,
                     "judgment": judgment.model_dump(mode="json") if judgment else None,
                     "runtime": monitor.last_stats,
                 }
                 rows.append(row)
                 output.write_text(
-                    json.dumps({"model": model, "rows": rows, "gate": gate(rows)}, indent=2), encoding="utf-8"
+                    json.dumps(
+                        {
+                            "model": model,
+                            "rows": rows,
+                            "gate": gate(rows),
+                            "failure_breakdown": failure_breakdown(rows),
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
                 )
                 print(
                     f"{case['id']} thinking={thinking} correct={row['correct']} "
@@ -125,4 +169,7 @@ def experiment(path: Path, model: str, output: Path) -> None:
                 )
     finally:
         monitor.close()
-    print(json.dumps(gate(rows), indent=2), flush=True)
+    print(
+        json.dumps({"gate": gate(rows), "failure_breakdown": failure_breakdown(rows)}, indent=2),
+        flush=True,
+    )
