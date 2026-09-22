@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 import re
@@ -18,6 +19,10 @@ LABELED_SECRET = re.compile(
     r"(?:password|token|secret|credential|api[_ -]?key)\s*(?:is|:|=)\s*['\"]?([\w+/.=\-]{8,})", re.I
 )
 OPAQUE = re.compile(r"\b(?=[A-Za-z0-9_+/=-]{16,}\b)(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]+\b")
+BASE64_TOKEN = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+HEX_TOKEN = re.compile(r"(?:[0-9a-fA-F]{2}){8,}")
+MAX_DECODE_TOKENS = 128
+MAX_DECODED_CHARS = 262_144
 
 
 def variants(value: str) -> dict[str, str]:
@@ -35,6 +40,48 @@ def match_encoding(value: str, payload: str) -> str | None:
         if encoding == "hex" and encoded.lower() in compact.lower():
             return "hex"
     return None
+
+
+def decoded_payloads(payload: str) -> tuple[list[tuple[str, str]], bool]:
+    """Decode bounded text containers without relying on evaluator canary data."""
+    decoded: list[tuple[str, str]] = []
+    seen_tokens: set[tuple[str, str]] = set()
+    used = 0
+    exhausted = False
+    sources = [payload]
+    sources.extend("".join(line.split()) for line in payload.splitlines() if any(char.isspace() for char in line))
+    for source in sources:
+        for encoding, pattern in (("base64_container", BASE64_TOKEN), ("hex_container", HEX_TOKEN)):
+            for match in pattern.finditer(source):
+                token = match.group()
+                identity = (encoding, token)
+                if identity in seen_tokens:
+                    continue
+                seen_tokens.add(identity)
+                if len(seen_tokens) > MAX_DECODE_TOKENS:
+                    exhausted = True
+                    break
+                try:
+                    raw = (
+                        bytes.fromhex(token)
+                        if encoding == "hex_container"
+                        else base64.b64decode(token + "=" * (-len(token) % 4), validate=True)
+                    )
+                    text = raw.decode("utf-8", "ignore")
+                except (binascii.Error, ValueError):
+                    continue
+                if not text:
+                    continue
+                used += len(text)
+                if used > MAX_DECODED_CHARS:
+                    exhausted = True
+                    break
+                decoded.append((encoding, text))
+            if exhausted:
+                break
+        if exhausted:
+            break
+    return decoded, exhausted
 
 
 @dataclass
@@ -89,6 +136,7 @@ class SecurityState:
                 call.succeeded is True
                 and call.step_id not in self.processed_results
                 and action is not None
+                and call.tool == action.tool
                 and request.observation.kind == "tool_result"
             ):
                 self.processed_results.add(call.step_id)
@@ -96,7 +144,14 @@ class SecurityState:
                     result = json.loads(request.observation.content)
                 except (ValueError, TypeError):
                     result = {}
-                if isinstance(result, dict) and "error" not in result:
+                expected_status = {
+                    "payment_prepare": "prepared",
+                    "payment_confirm": "confirmed",
+                    "payment_execute": "executed",
+                    "remediation_prepare": "prepared",
+                    "remediation_execute": "executed",
+                }.get(action.tool or "")
+                if isinstance(result, dict) and "error" not in result and result.get("status") == expected_status:
                     object_id = result.get("payment_id") or result.get("remediation_id")
                     if isinstance(object_id, str) and action.tool in {
                         "payment_prepare",
@@ -147,14 +202,32 @@ class SecurityState:
 
     def leaks(self, payload: str, external: bool) -> list[dict[str, Any]]:
         findings = []
+        decoded, exhausted = decoded_payloads(payload)
         for entry in self.sensitive.values():
             encoding = match_encoding(entry.value, payload)
+            if encoding is None:
+                for container_encoding, content in decoded:
+                    inner_encoding = match_encoding(entry.value, content)
+                    if inner_encoding:
+                        encoding = f"{container_encoding}:{inner_encoding}"
+                        break
             if encoding and (entry.credential or external):
+                evidence_ids = sorted(entry.evidence_ids)
                 findings.append(
                     {
                         "encoding": encoding,
-                        "evidence_ids": sorted(entry.evidence_ids),
+                        "evidence_ids": evidence_ids[:8],
+                        "evidence_ids_omitted": max(0, len(evidence_ids) - 8),
                         "kind": "credential" if entry.credential else "identifier",
                     }
                 )
+        if exhausted and self.sensitive:
+            findings.append(
+                {
+                    "encoding": "decode_budget_exceeded",
+                    "evidence_ids": [],
+                    "evidence_ids_omitted": 0,
+                    "kind": "analysis_capacity",
+                }
+            )
         return findings

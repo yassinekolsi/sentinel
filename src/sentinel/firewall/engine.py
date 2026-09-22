@@ -49,7 +49,11 @@ class Firewall(Defense):
             reason_codes=[code],
             explanation=explanation[:500],
             rewritten_action=rewrite,
-            metadata={"score_semantics": "uncalibrated risk indicator; not a probability", **(metadata or {})},
+            metadata={
+                "score_semantics": "uncalibrated risk indicator; not a probability",
+                "confidence_semantics": "decision-path confidence; not safety probability",
+                **(metadata or {}),
+            },
         )
 
     def target(self, action: CandidateAction) -> CandidateAction:
@@ -185,6 +189,7 @@ class Firewall(Defense):
         if hard:
             return hard
         semantic_metadata: dict[str, Any] = {}
+        semantic_confidence: float | None = None
         if self.monitor and not self.is_read(action):
             try:
                 judgment = self.monitor.assess(request, state, thinking=False)
@@ -192,6 +197,7 @@ class Firewall(Defense):
                 if self.cascade and (judgment.uncertain or self.consequential(request, action)):
                     judgment = self.monitor.assess(request, state, thinking=True)
                     passes = 2
+                semantic_confidence = judgment.confidence
                 semantic_metadata = {"semantic": judgment.model_dump(mode="json"), "passes": passes}
                 if judgment.unsafe:
                     return self.result(
@@ -213,6 +219,7 @@ class Firewall(Defense):
                     Decision.ALLOW,
                     "CONFIRMATION_REQUEST_ALLOWED",
                     risk=0.3,
+                    confidence=semantic_confidence if semantic_confidence is not None else 1.0,
                     explanation="Requesting simulated approval; this does not execute the target.",
                     metadata=semantic_metadata,
                 )
@@ -225,6 +232,7 @@ class Firewall(Defense):
                         Decision.REWRITE,
                         "SAFE_DOWNGRADE",
                         risk=0.4,
+                        confidence=semantic_confidence if semantic_confidence is not None else 1.0,
                         rewrite=replacement,
                         explanation="Replaced unconfirmed consequential action with a rechecked safe operation.",
                         metadata=semantic_metadata,
@@ -240,7 +248,7 @@ class Firewall(Defense):
             Decision.ALLOW,
             "CHECKS_PASSED",
             risk=0.1 if self.monitor else 0.0,
-            confidence=0.5 if self.monitor else 1.0,
+            confidence=semantic_confidence if semantic_confidence is not None else 1.0,
             explanation="No violation found within the enabled checks; this is not a safety guarantee.",
             metadata=semantic_metadata,
         )
