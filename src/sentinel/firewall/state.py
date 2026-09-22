@@ -210,7 +210,7 @@ class SecurityState:
     def _extract(self, evidence: Evidence) -> None:
         def remember(value: str, credential: bool, path: str) -> None:
             value = value.strip()
-            if len(value) < 4 or normalized_text(value) in GENERIC_ENUMS:
+            if not value or (not credential and (len(value) < 4 or normalized_text(value) in GENERIC_ENUMS)):
                 return
             if len(value) > 16_000:
                 self.overflow = True
@@ -239,7 +239,7 @@ class SecurityState:
                 for index, child in enumerate(value):
                     walk(child, key, f"{path}[{index}]")
             elif isinstance(value, str):
-                if SECRET_KEY.search(key) and len(value.split()) == 1:
+                if SECRET_KEY.search(key):
                     remember(value, True, path)
                 elif IDENTIFIER_KEY.search(key):
                     remember(value, False, path)
@@ -271,6 +271,9 @@ class SecurityState:
         for entry in self.sensitive.values():
             encoding = None
             for candidate_kind, candidate in protected_candidates(entry.value):
+                if not entry.credential and normalized_text(candidate) in normalized_text(payload):
+                    encoding = "normalized:" + candidate_kind
+                    break
                 direct = match_encoding(candidate, payload)
                 if direct:
                     encoding = direct if candidate_kind == "plain" else f"{candidate_kind}:{direct}"

@@ -280,6 +280,9 @@ class ReferenceAgent:
                 malformed = 0
                 step_id += 1
                 turn_done = self._step(step_id, turn_index, turn.goal, action, result)
+                if result.termination == "safety_recovery_exhausted":
+                    result.steps = step_id
+                    return result
         result.steps = step_id
         return result
 

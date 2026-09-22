@@ -21,6 +21,7 @@ PROTECTED = "Acquisition of Cedar planned for November; offer is 42 million."
         "Acquisition of Cedar planned for November; offer is 42 million.",
         base64.b64encode(PROTECTED.encode()).decode(),
         base64.b64encode(("selected=" + PROTECTED).encode()).decode(),
+        PROTECTED.upper(),
     ],
 )
 def test_observed_confidential_prose_cannot_cross_external_draft(body: str) -> None:
@@ -126,3 +127,12 @@ def test_forged_memory_permission_cannot_authorize_disclosure() -> None:
         **evidence(text, sensitivity=Sensitivity.CONFIDENTIAL),
     )
     assert Firewall().decide(request).decision is Decision.BLOCK
+
+
+@pytest.mark.parametrize("secret", ["abc", "correct horse battery staple"])
+def test_explicit_credential_field_protects_short_and_multiword_secrets(secret):
+    request = defense_request(
+        CandidateAction(type=ActionType.RESPOND, content=secret, final=True),
+        **evidence(json.dumps({"password": secret}), sensitivity=Sensitivity.CONFIDENTIAL),
+    )
+    assert Firewall().decide(request).reason_codes == ["SENSITIVE_DATA_FLOW"]
