@@ -289,12 +289,14 @@ def main() -> None:
     )
     (output / "demo-script.md").write_text(
         "# Recording script - target 8 minutes\n\n"
-        "Keep RECORDED REPLAY, REAL QWEN (or MOCK where appropriate), SYNTHETIC DATA, and SIMULATED HUMAN labels visible.\n\n"
+        "Keep RECORDED REPLAY, REAL QWEN (or MOCK where appropriate), SYNTHETIC DATA, "
+        "and SIMULATED HUMAN labels visible.\n\n"
         "1. 0:00-0:45: State the problem, four interventions, structural default, and synthetic setting.\n"
         "2. 0:45-2:00: Explain authority, observed data flow, exact approval, lifecycle, and recovery.\n"
         "3. 2:00-3:00: Open replays/enterprise_project_status-rules.html. Show the benign goal and recorded outcome.\n"
         "4. 3:00-5:00: Compare enterprise_poisoned_invoice allow_all and rules replays. Show observed payload, "
-        "proposed action, intervention, and actual final outcome. Only claim safe recovery if this trace demonstrates it.\n"
+        "proposed action, intervention, and actual final outcome. "
+        "Only claim safe recovery if this trace demonstrates it.\n"
         "5. 5:00-6:00: Present the mock table with its reference-plan qualification, then the separate real matrix.\n"
         "6. 6:00-7:00: Show the semantic failure and explain why thinking/cascade remain disabled.\n"
         "7. 7:00-8:00: State limitations, source revision, manifest/checksums, and reproduction commands.\n\n"
