@@ -460,7 +460,6 @@ def build_html(markdown_source: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="generator" content="scripts/render-report.py">
-  <base href="https://github.com/yassinekolsi/sentiel/blob/main/reports/">
   <title>SENTINEL technical report: evidence-first action firewall</title>
   <style>
 {STYLES}
