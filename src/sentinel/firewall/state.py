@@ -85,8 +85,12 @@ class SecurityState:
         if request.observation and request.history_digest.tool_calls:
             call = request.history_digest.tool_calls[-1]
             action = self.pending.get(call.step_id)
-            if (call.succeeded is True and call.step_id not in self.processed_results and action is not None
-                    and request.observation.kind == "tool_result"):
+            if (
+                call.succeeded is True
+                and call.step_id not in self.processed_results
+                and action is not None
+                and request.observation.kind == "tool_result"
+            ):
                 self.processed_results.add(call.step_id)
                 try:
                     result = json.loads(request.observation.content)
@@ -95,7 +99,11 @@ class SecurityState:
                 if isinstance(result, dict) and "error" not in result:
                     object_id = result.get("payment_id") or result.get("remediation_id")
                     if isinstance(object_id, str) and action.tool in {
-                        "payment_prepare", "payment_confirm", "payment_execute", "remediation_prepare", "remediation_execute"
+                        "payment_prepare",
+                        "payment_confirm",
+                        "payment_execute",
+                        "remediation_prepare",
+                        "remediation_execute",
                     }:
                         expected_id = action.arguments.get("payment_id") or action.arguments.get("remediation_id")
                         if expected_id is None or object_id == expected_id:
@@ -131,6 +139,7 @@ class SecurityState:
                 if evidence.sensitivity == "restricted":
                     for match in OPAQUE.finditer(value):
                         remember(match.group(), True)
+
         try:
             walk(json.loads(evidence.content))
         except ValueError:
@@ -141,6 +150,11 @@ class SecurityState:
         for entry in self.sensitive.values():
             encoding = match_encoding(entry.value, payload)
             if encoding and (entry.credential or external):
-                findings.append({"encoding": encoding, "evidence_ids": sorted(entry.evidence_ids),
-                                 "kind": "credential" if entry.credential else "identifier"})
+                findings.append(
+                    {
+                        "encoding": encoding,
+                        "evidence_ids": sorted(entry.evidence_ids),
+                        "kind": "credential" if entry.credential else "identifier",
+                    }
+                )
         return findings

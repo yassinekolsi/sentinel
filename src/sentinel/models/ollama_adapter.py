@@ -45,6 +45,7 @@ class OllamaModelAdapter(ModelAdapter):
             base_url=(host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/"),
             timeout=timeout_s,
             transport=transport,
+            trust_env=False,
         )
         self._max_new_tokens = max_new_tokens
         self._max_context_chars = max_context_chars
@@ -72,7 +73,8 @@ class OllamaModelAdapter(ModelAdapter):
             "stream": False,
             "think": self._enable_thinking,
             # temperature 0 so a rerun of the same scenario produces the same trace
-            "options": {"temperature": 0, "num_predict": self._max_new_tokens},
+            "keep_alive": "30m",
+            "options": {"temperature": 0, "num_ctx": 4096, "num_predict": self._max_new_tokens},
         }
         try:
             response = self._client.post("/api/chat", json=payload)

@@ -310,6 +310,7 @@ class ReferenceAgent:
                 if decision.rewritten_action
                 else None,
                 "defense_error": error,
+                "metadata": decision.metadata,
             },
         )
 

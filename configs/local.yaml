@@ -1,0 +1,6 @@
+defense:
+  timeout_s: 100
+  transport_retries: 0
+  fail_mode: closed
+  max_conversation_items: 100
+  max_item_chars: 16000
