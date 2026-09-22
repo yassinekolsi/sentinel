@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
+from dataclasses import dataclass
 from enum import StrEnum
+from threading import RLock
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -14,6 +17,7 @@ from sentinel.defenses.interface import DefenseRequest
 from sentinel.firewall.state import SecurityState
 
 Answer = Literal["yes", "no", "uncertain"]
+MAX_MONITOR_CACHE_ENTRIES = 256
 
 
 class Judgment(BaseModel):
@@ -82,6 +86,13 @@ class MonitorError(RuntimeError):
         self.category = category
 
 
+@dataclass(frozen=True)
+class _MonitorCacheEntry:
+    judgment: Judgment | None = None
+    error_message: str | None = None
+    error_category: MonitorFailureCategory | None = None
+
+
 class LocalMonitor:
     def __init__(
         self,
@@ -97,8 +108,14 @@ class LocalMonitor:
         self.model = model
         self.client = httpx.Client(base_url=host, transport=transport, trust_env=False, follow_redirects=False)
         self.last_stats: dict[str, object] = {}
+        self._lock = RLock()
+        self._cache: OrderedDict[tuple[str, bool], _MonitorCacheEntry] = OrderedDict()
 
     def assess(self, request: DefenseRequest, state: SecurityState, *, thinking: bool) -> Judgment:
+        with self._lock:
+            return self._assess_locked(request, state, thinking=thinking)
+
+    def _assess_locked(self, request: DefenseRequest, state: SecurityState, *, thinking: bool) -> Judgment:
         # Neither scenario/run identifiers nor source filenames are model features.
         evidence = []
         used = 0
@@ -127,6 +144,43 @@ class LocalMonitor:
             "object_state": state.objects,
         }
         serialized = json.dumps(data, ensure_ascii=False)
+        cache_key = (serialized, thinking)
+        self.last_stats = {"thinking": thinking, "context_omitted": omitted, "cache_hit": False}
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            self._cache.move_to_end(cache_key)
+            self.last_stats["cache_hit"] = True
+            if cached.judgment is not None:
+                return cached.judgment.model_copy(deep=True)
+            raise MonitorError(
+                cached.error_message or "cached monitor failure",
+                category=cached.error_category or MonitorFailureCategory.OTHER,
+            )
+
+        try:
+            judgment = self._assess_uncached(
+                serialized,
+                allowed_evidence_ids={item["id"] for item in evidence},
+                thinking=thinking,
+            )
+            if omitted and not judgment.unsafe:
+                judgment = judgment.model_copy(update={"authorized": "uncertain"})
+        except MonitorError as exc:
+            self._remember(
+                cache_key,
+                _MonitorCacheEntry(error_message=str(exc), error_category=exc.category),
+            )
+            raise
+        self._remember(cache_key, _MonitorCacheEntry(judgment=judgment.model_copy(deep=True)))
+        return judgment
+
+    def _assess_uncached(
+        self,
+        serialized: str,
+        *,
+        allowed_evidence_ids: set[str],
+        thinking: bool,
+    ) -> Judgment:
         if len(serialized) > 11_000:
             raise MonitorError("mandatory context exceeds configured budget")
         payload = {
@@ -138,7 +192,6 @@ class LocalMonitor:
             "keep_alive": "30m",
             "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 1536 if thinking else 384},
         }
-        self.last_stats = {"thinking": thinking, "context_omitted": omitted}
         try:
             response = self.client.post("/api/chat", json=payload, timeout=60 if thinking else 20)
             response.raise_for_status()
@@ -183,15 +236,21 @@ class LocalMonitor:
                 "monitor judgment failed JSON or schema validation",
                 category=MonitorFailureCategory.PARSE_VALIDATION,
             ) from exc
-        allowed = {e["id"] for e in evidence} | {"policy", "user_goal", "candidate"}
+        allowed = allowed_evidence_ids | {"policy", "user_goal", "candidate"}
         if not set(judgment.evidence_ids).issubset(allowed):
             raise MonitorError(
                 "invalid evidence reference",
                 category=MonitorFailureCategory.INVALID_EVIDENCE,
             )
-        if omitted and not judgment.unsafe:
-            judgment = judgment.model_copy(update={"authorized": "uncertain"})
         return judgment
 
+    def _remember(self, key: tuple[str, bool], entry: _MonitorCacheEntry) -> None:
+        self._cache[key] = entry
+        self._cache.move_to_end(key)
+        if len(self._cache) > MAX_MONITOR_CACHE_ENTRIES:
+            self._cache.popitem(last=False)
+
     def close(self) -> None:
-        self.client.close()
+        with self._lock:
+            self._cache.clear()
+            self.client.close()

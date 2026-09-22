@@ -5,7 +5,12 @@ import pytest
 
 from sentinel.core.actions import ActionType, CandidateAction
 from sentinel.firewall.experiment import failure_breakdown, gate
-from sentinel.firewall.semantic import LocalMonitor, MonitorError, MonitorFailureCategory
+from sentinel.firewall.semantic import (
+    MAX_MONITOR_CACHE_ENTRIES,
+    LocalMonitor,
+    MonitorError,
+    MonitorFailureCategory,
+)
 from sentinel.firewall.state import SecurityState
 from tests.conftest import defense_request
 
@@ -126,3 +131,87 @@ def test_failure_breakdown_is_split_by_thinking_mode_without_changing_gate():
 def test_unknown_failure_category_is_counted_as_other():
     breakdown = failure_breakdown([{"thinking": False, "error": "unexpected", "error_category": "future_category"}])
     assert breakdown["overall"]["by_category"]["other"] == 1
+
+
+def test_monitor_caches_success_for_exact_input_without_run_identifiers():
+    calls = 0
+
+    def handle(_request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"done": True, "message": {"content": json.dumps(judgment())}})
+
+    monitor = LocalMonitor(transport=httpx.MockTransport(handle))
+    action = CandidateAction(type=ActionType.RESPOND, content="Summary")
+    first = monitor.assess(defense_request(action, run_id="first-run"), SecurityState(), thinking=False)
+    assert monitor.last_stats["cache_hit"] is False
+    second = monitor.assess(defense_request(action, run_id="second-run"), SecurityState(), thinking=False)
+    assert monitor.last_stats["cache_hit"] is True
+    assert first == second
+    assert first is not second
+    assert calls == 1
+    monitor.close()
+
+
+def test_monitor_caches_failure_and_preserves_category():
+    calls = 0
+
+    def timeout(request):
+        nonlocal calls
+        calls += 1
+        raise httpx.ReadTimeout("slow", request=request)
+
+    monitor = LocalMonitor(transport=httpx.MockTransport(timeout))
+    request = defense_request(CandidateAction(type=ActionType.RESPOND, content="Summary"))
+    with pytest.raises(MonitorError) as first:
+        monitor.assess(request, SecurityState(), thinking=False)
+    assert monitor.last_stats["cache_hit"] is False
+    with pytest.raises(MonitorError) as second:
+        monitor.assess(request, SecurityState(), thinking=False)
+    assert monitor.last_stats["cache_hit"] is True
+    assert first.value.category is second.value.category is MonitorFailureCategory.TIMEOUT
+    assert str(first.value) == str(second.value)
+    assert calls == 1
+    monitor.close()
+
+
+def test_monitor_cache_key_includes_semantic_input_and_thinking_mode():
+    calls = 0
+
+    def handle(_request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"done": True, "message": {"content": json.dumps(judgment())}})
+
+    monitor = LocalMonitor(transport=httpx.MockTransport(handle))
+    state = SecurityState()
+    first = defense_request(CandidateAction(type=ActionType.RESPOND, content="First"))
+    changed = defense_request(CandidateAction(type=ActionType.RESPOND, content="Changed"))
+    monitor.assess(first, state, thinking=False)
+    monitor.assess(changed, state, thinking=False)
+    monitor.assess(first, state, thinking=True)
+    assert calls == 3
+    assert monitor.last_stats["cache_hit"] is False
+    monitor.assess(first, state, thinking=False)
+    assert calls == 3
+    assert monitor.last_stats["cache_hit"] is True
+    monitor.close()
+
+
+def test_monitor_cache_is_bounded_and_cleared_on_close():
+    calls = 0
+
+    def handle(_request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"done": True, "message": {"content": json.dumps(judgment())}})
+
+    monitor = LocalMonitor(transport=httpx.MockTransport(handle))
+    state = SecurityState()
+    for index in range(MAX_MONITOR_CACHE_ENTRIES + 1):
+        request = defense_request(CandidateAction(type=ActionType.RESPOND, content=f"Summary {index}"))
+        monitor.assess(request, state, thinking=False)
+    assert len(monitor._cache) == MAX_MONITOR_CACHE_ENTRIES
+    assert calls == MAX_MONITOR_CACHE_ENTRIES + 1
+    monitor.close()
+    assert not monitor._cache
