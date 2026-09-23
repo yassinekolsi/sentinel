@@ -100,7 +100,8 @@ def npm_command(*arguments: str, cwd: Path = FRONTEND) -> int:
     if os.name == "nt":
         print(f"+ ({cwd.relative_to(ROOT)}) {npm} {shlex.join(list(arguments))}", flush=True)
         try:
-            return subprocess.run([npm, *arguments], cwd=cwd, check=False, shell=True).returncode
+            # Windows npm installs a .cmd shim; these arguments are fixed task commands.
+            return subprocess.run([npm, *arguments], cwd=cwd, check=False, shell=True).returncode  # noqa: S602
         except FileNotFoundError as error:
             print(f"Could not start npm: {error}", file=sys.stderr)
             return 127
