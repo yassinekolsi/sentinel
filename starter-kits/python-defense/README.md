@@ -12,6 +12,7 @@ python-defense/
 ├── app/models.py        # example request/response shapes (self-contained; no sentinel import needed)
 ├── app/decision.py      # <- your defense logic
 ├── app/main.py          # FastAPI service: GET /healthz, POST /v1/decision
+├── app/request_limits.py # rejects decision bodies above 256 KiB before parsing
 ├── tests/test_app.py
 ├── Dockerfile           # non-root, port 8080
 └── sentinel-submission.yaml

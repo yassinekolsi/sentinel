@@ -131,6 +131,7 @@ Request (abridged):
 ```json
 {
   "run_id": "finance_false_approval-python_defense-s0",
+  "execution_id": "opaque-per-run-id",
   "step_id": 4,
   "user_goal": "For case CASE-7001, prepare the 1,250 TND refund ...",
   "conversation": [{"role": "tool", "kind": "tool_result", "content": "...", "provenance_ids": ["prov-0003"]}],
@@ -144,6 +145,13 @@ Request (abridged):
                      "least_trusted_seen": "untrusted_external", "most_sensitive_seen": "confidential"}
 }
 ```
+
+Decision requests are limited to **256 KiB**. The reference API also bounds conversation length,
+provenance count, and individual text fields; oversized HTTP bodies receive `413` before JSON parsing.
+If your HTTP defense keeps per-execution state, implement idempotent `DELETE /v1/executions/{execution_id}`
+to release that run after evaluation. The client uses this endpoint
+when available. Keep your capacity limit fail-closed if cleanup is missed, and do not evict live
+execution state.
 
 Response:
 
