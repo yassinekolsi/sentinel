@@ -67,7 +67,22 @@ ollama serve
 # In a second terminal: ollama pull qwen3:8b
 ```
 
-## Browser observatory
+## Next.js observatory
+
+The recording frontend lives in `frontend/`. It uses the ProxyTrace console layout and logo with
+SENTINEL's redacted, measured traces. From PowerShell at the repository root:
+
+```powershell
+.\scripts\start-observatory.ps1
+# Open http://127.0.0.1:3000
+```
+
+The script exports the current redacted traces, builds Next.js, and starts it on loopback. It shows
+ten recorded run groups, case selection, decision filters, search, source trust, the candidate action,
+the intervention, and what actually happened. Every page is marked as a recorded replay. A blocked
+attack with an incomplete user task stays labeled incomplete. All inputs are synthetic.
+
+## Legacy single-trace browser export
 
 Every run prints its `events.live.jsonl` path. In another terminal:
 
