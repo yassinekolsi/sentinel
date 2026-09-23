@@ -2,69 +2,42 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol
+from typing import Any, Protocol
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sentinel.core.actions import ArgValue, CandidateAction
+from sentinel.core.policy_context import (
+    ConfirmationRule as ConfirmationRule,
+)
+from sentinel.core.policy_context import (
+    DataFlowRule as DataFlowRule,
+)
+from sentinel.core.policy_context import (
+    DisclosurePermission,
+    PolicyContext,
+    PolicyRule,
+    Severity,
+    _Rule,
+)
+from sentinel.core.policy_context import (
+    ForbiddenEffectRule as ForbiddenEffectRule,
+)
+from sentinel.core.policy_context import (
+    PrerequisiteRule as PrerequisiteRule,
+)
+from sentinel.core.policy_context import (
+    ToolPermissionRule as ToolPermissionRule,
+)
 from sentinel.core.provenance import Sensitivity, TrustLevel
 from sentinel.core.scenario import Scenario, ScenarioError, SecurityProperty
 from sentinel.core.state import Effect, resolve_within
 
-
-class Severity(StrEnum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-    @property
-    def rank(self) -> int:
-        return list(Severity).index(self)
-
-
-class _Rule(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    id: str = Field(pattern=r"^[A-Z][A-Z0-9_]{2,63}$")
-    severity: Severity
-    description: str = ""
-
-
-class ToolPermissionRule(_Rule):
-    kind: Literal["tool_permission"]
-    consequential_severity: Severity = Severity.CRITICAL
-
-
-class ConfirmationRule(_Rule):
-    kind: Literal["requires_confirmation"]
-    tools: list[str] | Literal["consequential"] = "consequential"
-
-
-class DataFlowRule(_Rule):
-    kind: Literal["data_flow"]
-    min_sensitivity: Sensitivity = Sensitivity.CONFIDENTIAL
-    lower_severity: Severity = Severity.MEDIUM
-
-
-class ForbiddenEffectRule(_Rule):
-    kind: Literal["forbidden_effect"]
-
-
-class PrerequisiteRule(_Rule):
-    kind: Literal["prerequisite"]
-    tool: str
-    requires: list[str] = Field(min_length=1)
-
-
-Rule = Annotated[
-    ToolPermissionRule | ConfirmationRule | DataFlowRule | ForbiddenEffectRule | PrerequisiteRule,
-    Field(discriminator="kind"),
-]
+Rule = PolicyRule
 
 RULE_PROPERTY: dict[str, SecurityProperty] = {
     "tool_permission": SecurityProperty.NO_UNAUTHORIZED_TOOL,
@@ -81,6 +54,7 @@ class Policy(BaseModel):
     domain: str
     version: int = Field(ge=1)
     description: str = ""
+    public_disclosure_permissions: list[DisclosurePermission] = Field(default_factory=list, max_length=64)
     rules: list[Rule] = Field(min_length=1)
 
 
@@ -245,19 +219,24 @@ class PolicyEngine:
                 )
         return findings
 
-    def defense_context(self, tools: Mapping[str, ToolInfo]) -> dict[str, Any]:
-        """Participant-visible policy context. Contains no labels, plans, or payloads."""
+    def defense_context(
+        self,
+        tools: Mapping[str, ToolInfo],
+        *,
+        internal_email_domains: Sequence[str] = (),
+    ) -> PolicyContext:
+        """Build validated participant policy from trusted scenario and profile data."""
         confirmation_tools: set[str] = set()
         for rule in self._rules("requires_confirmation"):
             if rule.tools != "consequential":
                 confirmation_tools.update(rule.tools)
-        return {
-            "policy_id": self.policy.id,
-            "policy_version": self.policy.version,
-            "allowed_tools": list(self.scenario.allowed_tools),
-            "confirmation_required_tools": sorted(confirmation_tools),
-            "consequential_tools": sorted(
-                name for name, tool in tools.items() if getattr(tool, "consequential", False)
-            ),
-            "rules": [rule.model_dump(mode="json") for rule in self.policy.rules],
-        }
+        return PolicyContext(
+            policy_id=self.policy.id,
+            policy_version=self.policy.version,
+            allowed_tools=list(self.scenario.allowed_tools),
+            confirmation_required_tools=sorted(confirmation_tools),
+            consequential_tools=sorted(name for name, tool in tools.items() if getattr(tool, "consequential", False)),
+            internal_email_domains=list(internal_email_domains),
+            public_disclosure_permissions=list(self.policy.public_disclosure_permissions),
+            rules=list(self.policy.rules),
+        )

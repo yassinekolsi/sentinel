@@ -23,6 +23,7 @@ from sentinel.config import BENCHMARK_VERSION, CompetitionConfig
 from sentinel.core.actions import ActionType, CandidateAction, DefenseDecision
 from sentinel.core.events import Actor, Event, EventLog, EventType, LogicalClock
 from sentinel.core.policies import Finding, PolicyEngine, load_policy
+from sentinel.core.policy_context import PolicyContext
 from sentinel.core.result import (
     AttackMutationRecord,
     DecisionRecord,
@@ -291,10 +292,9 @@ def run_scenario(
         scenario, state, log, policy, attacker, config.attack_mode, competition.attack_simulation.query_budget
     )
     hooks.bind_registry(gateway)
-    policy_context: dict[str, Any] = policy.defense_context(registry.as_dict())
     internal_domain = state.settings.get("internal_email_domain")
-    if internal_domain:
-        policy_context["internal_email_domains"] = [internal_domain]
+    internal_domains = [internal_domain] if isinstance(internal_domain, str) and internal_domain else []
+    policy_context: PolicyContext = policy.defense_context(registry.as_dict(), internal_email_domains=internal_domains)
     agent = ReferenceAgent(
         scenario=scenario,
         state=state,

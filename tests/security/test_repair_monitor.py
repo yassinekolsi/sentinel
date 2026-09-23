@@ -2,6 +2,7 @@ import json
 
 import httpx
 
+from sentinel.core.policy_context import PolicyContext
 from sentinel.firewall.engine import Firewall
 from sentinel.firewall.semantic import LocalMonitor
 from sentinel.firewall.state import SecurityState
@@ -29,7 +30,8 @@ def test_success_cache_invalidates_on_model_and_policy_versions():
     assert len(calls) == 1
     monitor.model_digest = "model-b"
     monitor.assess(request, state, thinking=False)
-    request = request.model_copy(update={"policy_context": {**request.policy_context, "policy_version": "v2"}})
+    policy_context = PolicyContext.model_validate({**request.policy_context.model_dump(), "policy_version": 2})
+    request = request.model_copy(update={"policy_context": policy_context})
     monitor.assess(request, state, thinking=False)
     assert len(calls) == 3
     monitor.close()
