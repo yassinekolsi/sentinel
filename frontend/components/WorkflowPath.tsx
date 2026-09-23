@@ -69,7 +69,7 @@ export default function WorkflowPath({ steps, selected, onSelect, outcome }: { s
       const row = Math.floor(index / columns);
       const slot = index % columns;
       const column = row % 2 === 0 ? slot : columns - 1 - slot;
-      return { x: column * 300, y: row * 190 };
+      return { x: column * 270, y: row * 145 };
     };
     const flowNodes: FlowNode[] = steps.map((step, index) => {
       const decision = step.decision?.payload;
