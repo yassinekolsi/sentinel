@@ -1,5 +1,10 @@
 # Phase audit — 23 September 2026
 
+This is a historical snapshot, not a live status page. The full run directories described below are
+under `artifacts/`, which `.gitignore` excludes; they may be unavailable in a fresh checkout. The
+latest tracked-code mock measurement is recorded in
+[structural-mock-v1](evaluation-results/structural-mock-v1.md), with its own source and scenario identity.
+
 Scope: finish the defense, observability, reproducibility, and code/evidence package. The user
 explicitly excluded video and technical-report work. No report/video was produced or updated in this
 phase, and no external publication or portal submission is claimed.

@@ -1,4 +1,10 @@
-# sentiel repair plan for Sol
+# Archived repair plan
+
+This is a historical working note for an earlier checkout. Its workspace path, test counts,
+implementation requirements, and commit instructions are stale and do not describe the current
+repository state. Use [README.md](README.md) for current setup and
+[docs/evaluation-results/structural-mock-v1.md](docs/evaluation-results/structural-mock-v1.md) for
+the latest tracked-code measurement. The note is retained as development history.
 
 ## Objective and instructions
 

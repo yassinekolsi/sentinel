@@ -1,5 +1,8 @@
 # Participant guide
 
+This guide is retained from the original challenge materials. Event dates and submission logistics
+are historical; use the repository [README](../README.md) for current setup and validation commands.
+
 SENTINEL is not a hidden-test competition. The attacks are known; the challenge is to show how
 creatively, rigorously, and effectively you can engineer an AI agent that survives them.
 
