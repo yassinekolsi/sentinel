@@ -64,4 +64,6 @@ remain separate.
 ## CI status
 
 The GitHub Actions workflow runs the same `make check` gate on pushes, pull requests, and manual
-dispatch. The local checks above passed; the new hosted workflow has not yet run on GitHub.
+dispatch. Hosted run [35913958694](https://github.com/yassinekolsi/sentiel/actions/runs/35913958694)
+passed on commit `b65f65e` in 40 seconds, including dependency installation and `make check`. GitHub
+reported an informational `ubuntu-latest` migration annotation; it did not fail the run.
