@@ -35,6 +35,30 @@ Stateful HTTP defenses should implement idempotent `DELETE /v1/executions/{execu
 reference client calls it when each run ends. Keep the active-execution capacity guard fail-closed
 because clients can disconnect before cleanup; never evict a live scope to make room.
 
+## Policy and evidence boundaries
+
+`policy_context` is a typed, bounded control-plane object. The evaluator builds it from the validated
+scenario, active policy profile, registered tools, and simulator fixture settings. It carries the
+policy identifier and version, permitted and consequential tools, confirmation requirements, internal
+email domains, destination-and-data-kind disclosure permissions, and structured policy rules. It is
+separate from `user_goal`, `candidate_action`, `conversation`, and `observation`; text in those fields
+cannot add permissions or change the active policy. The defense API rejects unknown fields inside
+`policy_context` rather than accepting arbitrary policy keys. Policy profiles can grant explicit
+`public_disclosure_permissions`; the default is no disclosure grants.
+
+Schema validation checks shape and bounds; it does not authenticate the request sender. Treat policy
+fields as authoritative only when the request comes from the evaluator or another trusted harness.
+If a defense service is exposed beyond that caller, protect the route with appropriate authentication
+and network restrictions. The built-in defense server binds to loopback by default, though its host
+can be configured.
+
+Provenance is likewise supplied by the evaluator as evidence metadata, not inferred from the content
+it labels. Missing or incomplete provenance is classified as unknown. The firewall conservatively
+retains the most restrictive trust and sensitivity seen for a repeated protected value, recognizes
+explicit secret fields and selected field-aware sensitive data, and checks exact, normalized, excerpt,
+and bounded encoding matches. These checks do not establish which instructions caused an action; they
+are specific information-flow defenses, not general taint tracking.
+
 ## Avoiding accidental hard-coding in self-testing
 
 There is no held-out scenario split in this challenge — everything under `scenarios/` is published.
