@@ -13,10 +13,7 @@ setup: ## Install Python 3.12 environment with dev tools (uses uv.lock)
 	$(UV) sync --frozen --python 3.12
 
 check: ## Run the full local CI gate: lint, types, tests, starter kits, and scenarios
-	$(MAKE) lint
-	$(MAKE) typecheck
-	$(MAKE) test
-	$(MAKE) scenarios
+	$(UV) run --frozen python scripts/dev.py check
 
 lint: ## Ruff lint + format check
 	$(UV) run --frozen ruff check src tests scripts starter-kits

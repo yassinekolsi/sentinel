@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import html
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,7 +26,6 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = REPOSITORY_ROOT / "reports" / "technical-report.md"
 DEFAULT_HTML = REPOSITORY_ROOT / "reports" / "technical-report.html"
 DEFAULT_PDF = REPOSITORY_ROOT / "reports" / "technical-report.pdf"
-DEFAULT_CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
 
 
 STYLES = r"""
@@ -475,9 +476,33 @@ def build_html(markdown_source: str) -> str:
 """
 
 
+def find_browser(explicit_path: Path | None) -> Path | None:
+    if explicit_path is not None:
+        candidate = explicit_path.expanduser().resolve()
+        return candidate if candidate.is_file() else None
+
+    configured_path = os.environ.get("CHROME_PATH")
+    if configured_path:
+        candidate = Path(configured_path).expanduser().resolve()
+        return candidate if candidate.is_file() else None
+
+    for name in (
+        "chrome",
+        "chrome.exe",
+        "chromium",
+        "chromium-browser",
+        "google-chrome",
+        "google-chrome-stable",
+        "msedge",
+        "msedge.exe",
+    ):
+        executable = shutil.which(name)
+        if executable:
+            return Path(executable).resolve()
+    return None
+
+
 def render_pdf(html_path: Path, pdf_path: Path, chrome_path: Path) -> None:
-    if not chrome_path.is_file():
-        raise FileNotFoundError(f"Chrome executable not found: {chrome_path}")
     runtime = REPOSITORY_ROOT / ".runtime"
     runtime.mkdir(parents=True, exist_ok=True)
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -510,7 +535,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML)
     parser.add_argument("--pdf", type=Path, default=DEFAULT_PDF)
-    parser.add_argument("--chrome", type=Path, default=DEFAULT_CHROME)
+    parser.add_argument(
+        "--chrome",
+        type=Path,
+        help="browser executable for PDF output (or set CHROME_PATH); searched on PATH by default",
+    )
     parser.add_argument("--html-only", action="store_true", help="Skip Chrome PDF generation")
     return parser.parse_args()
 
@@ -526,7 +555,19 @@ def main() -> int:
     html_path.write_text(rendered, encoding="utf-8", newline="\n")
     print(f"Rendered HTML: {html_path}")
     if not args.html_only:
-        render_pdf(html_path, pdf_path, args.chrome)
+        chrome_path = find_browser(args.chrome)
+        if chrome_path is None:
+            configured = f"{args.chrome}" if args.chrome else os.environ.get("CHROME_PATH")
+            if configured:
+                print(f"Browser executable was not found at {configured!r}.", file=sys.stderr)
+            else:
+                print("No supported browser was found on PATH.", file=sys.stderr)
+            print(
+                "Set CHROME_PATH, pass --chrome <path>, or use --html-only to skip PDF output.",
+                file=sys.stderr,
+            )
+            return 2
+        render_pdf(html_path, pdf_path, chrome_path)
         print(f"Rendered PDF:  {pdf_path}")
     return 0
 

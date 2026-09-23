@@ -51,21 +51,23 @@ flowchart LR
 
 ## Setup and quick run
 
-Install 64-bit Python 3.12 and `uv`. With `uv` on `PATH`, run from the repository root on macOS,
-Linux, Windows, or WSL:
+Install 64-bit Python 3.12 and [`uv`](https://docs.astral.sh/uv/getting-started/installation/). From
+the repository root, use the same task runner on Windows, Linux, or macOS. The first command installs
+the locked environment; the rest use that environment:
 
 ```sh
-uv sync --frozen --python 3.12
-uv run --frozen sentinel-firewall doctor
-uv run --frozen sentinel-firewall run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
+python scripts/dev.py setup
+python scripts/dev.py doctor
+python scripts/dev.py run --model mock
+python scripts/dev.py check
 ```
 
-This uses the committed `uv.lock`. Dependency installation needs network access; the mock run needs no
-model or Ollama. Run `make check` for lint, types, tests, starter kits, and scenario validation when
-GNU Make is available.
+On Windows, use `py -3.12` in place of `python` if Python is not on `PATH`. The task runner uses the
+committed `uv.lock`; setup needs network access, while the mock run needs no model or Ollama. The
+existing `make check` command remains available as a compatibility path where GNU Make is installed.
 
-For native Windows PowerShell, the setup wrapper checks Python 3.12 and installs the locked
-dependencies. It can install `uv` for that Python installation when requested:
+For native Windows PowerShell, the optional setup and CLI wrappers remain available. The setup
+wrapper checks Python 3.12 and can install `uv` for that Python installation when requested:
 
 ```powershell
 .\scripts\setup-windows.ps1
@@ -92,18 +94,21 @@ previous real-model observations are documented separately from mock results.
 
 ## Next.js observatory
 
-The recording frontend lives in `frontend/` and presents synthetic SENTINEL traces in a workflow view.
-From PowerShell at the repository root:
+The optional recording frontend lives in `frontend/` and presents synthetic SENTINEL traces in a
+workflow view. It requires Node.js and npm; neither is needed for firewall setup, runs, or checks.
+From any supported shell at the repository root:
 
-```powershell
-.\scripts\start-observatory.ps1
+```sh
+python scripts/dev.py observatory
 # Open http://127.0.0.1:3000
 ```
 
-The script exports current redacted traces when raw run artifacts are available, builds the frontend,
-and serves it on loopback. It includes run groups, a clickable workflow, case selection, decision
-filters, search, source trust, candidate actions, interventions, and outcomes. Blocked attacks with
-incomplete tasks remain labeled incomplete.
+The task exports current redacted traces when raw run artifacts are available, builds the frontend,
+and serves it on loopback. To run its optional browser check, keep the observatory running and use
+`python scripts/dev.py visual-check` in a second terminal. Playwright installs and launches its
+managed Chromium; a system Chrome path is not required. The view includes run groups, a clickable
+workflow, case selection, decision filters, search, source trust, candidate actions, interventions,
+and outcomes. Blocked attacks with incomplete tasks remain labeled incomplete.
 
 ## Legacy single-trace browser export
 
@@ -199,34 +204,11 @@ imply legitimate task completion. Broad robustness, calibration, and AgentDojo e
 
 ## Development checks
 
-The `Makefile` is the shared developer entry point on Linux, macOS, and Windows environments with
-GNU Make installed. From the repository root, install the frozen Python 3.12 environment and run the
-same check gate used by CI:
-
-```sh
-uv sync --frozen --python 3.12
-make check
-```
-
-`make check` runs Ruff lint and formatting checks, mypy, the main and starter-kit test suites, and
-scenario validation. It does not download model weights or require Ollama. `make setup` performs the
-same frozen environment sync.
-
-On Windows PowerShell without GNU Make, continue using the commands below after
-`scripts/setup-windows.ps1`:
-
-```powershell
-py -3.12 -m uv run --frozen ruff check src tests scripts starter-kits
-py -3.12 -m uv run --frozen ruff format --check src tests scripts starter-kits
-py -3.12 -m uv run --frozen mypy
-py -3.12 -m uv run --frozen pytest -ra
-Push-Location starter-kits\python-defense
-py -3.12 -m uv run --project ..\.. --frozen pytest -q
-Pop-Location
-Push-Location starter-kits\learned-monitor
-py -3.12 -m uv run --project ..\.. --frozen pytest -q
-Pop-Location
-```
+Run `python scripts/dev.py check` (or `py -3.12 scripts/dev.py check` on Windows when needed) for
+Ruff lint and formatting checks, mypy, the main and starter-kit test suites, and scenario validation.
+CI uses this same task runner on Windows, Linux, and macOS. It does not download model weights or
+require Ollama. `python scripts/dev.py setup` installs the frozen Python environment. GNU Make
+targets remain available as a compatibility path.
 
 On Windows accounts without symlink-creation privilege, symlink-specific tests report a targeted
 skip; the remaining traversal checks still run.
