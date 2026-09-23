@@ -3,54 +3,60 @@ UV ?= uv
 DEFENSE ?= provenance
 SCENARIO ?= scenarios/public/finance/finance_false_approval.yaml
 
-.PHONY: help setup lint format typecheck test test-security test-kits run-baseline eval-public \
+.PHONY: help setup check lint format typecheck test test-security test-kits run-baseline eval-public \
         eval-validation scenarios fixtures schema clean
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
 
 setup: ## Install Python 3.12 environment with dev tools (uses uv.lock)
-	$(UV) sync --python 3.12
+	$(UV) sync --frozen --python 3.12
+
+check: ## Run the full local CI gate: lint, types, tests, starter kits, and scenarios
+	$(MAKE) lint
+	$(MAKE) typecheck
+	$(MAKE) test
+	$(MAKE) scenarios
 
 lint: ## Ruff lint + format check
-	$(UV) run ruff check src tests scripts starter-kits
-	$(UV) run ruff format --check src tests scripts starter-kits
+	$(UV) run --frozen ruff check src tests scripts starter-kits
+	$(UV) run --frozen ruff format --check src tests scripts starter-kits
 
 format: ## Apply ruff formatting and safe fixes
-	$(UV) run ruff check --fix src tests scripts starter-kits
-	$(UV) run ruff format src tests scripts starter-kits
+	$(UV) run --frozen ruff check --fix src tests scripts starter-kits
+	$(UV) run --frozen ruff format src tests scripts starter-kits
 
 typecheck: ## mypy on the sentinel package
-	$(UV) run mypy
+	$(UV) run --frozen mypy
 
 test: ## Full offline test suite (unit, integration, security) plus starter kits
-	$(UV) run pytest
+	$(UV) run --frozen pytest
 	$(MAKE) test-kits
 
 test-security: ## Security regression tests only
-	$(UV) run pytest tests/security -m security
+	$(UV) run --frozen pytest tests/security -m security
 
 test-kits: ## Starter kit test suites
-	cd starter-kits/python-defense && $(UV) run --project ../.. pytest -q
-	cd starter-kits/learned-monitor && $(UV) run --project ../.. pytest -q
+	cd starter-kits/python-defense && $(UV) run --project ../.. --frozen pytest -q
+	cd starter-kits/learned-monitor && $(UV) run --project ../.. --frozen pytest -q
 
 run-baseline: ## Run one scenario with a baseline defense and print the timeline
-	$(UV) run sentinel run --scenario $(SCENARIO) --defense $(DEFENSE)
+	$(UV) run --frozen sentinel run --scenario $(SCENARIO) --defense $(DEFENSE)
 
 eval-public: ## Deterministic scorecard on public scenarios (in-process baseline defense)
-	$(UV) run sentinel eval public --defense $(DEFENSE)
+	$(UV) run --frozen sentinel eval public --defense $(DEFENSE)
 
 eval-validation: ## Scorecard on validation scenarios
-	$(UV) run sentinel eval validation --defense $(DEFENSE)
+	$(UV) run --frozen sentinel eval validation --defense $(DEFENSE)
 
 scenarios: ## Validate all public and validation scenarios
-	$(UV) run sentinel scenarios validate scenarios
+	$(UV) run --frozen sentinel scenarios validate scenarios
 
 fixtures: ## Regenerate synthetic fixtures and public/validation scenarios
-	$(UV) run sentinel fixtures generate --scenarios
+	$(UV) run --frozen sentinel fixtures generate --scenarios
 
 schema: ## Export scenario JSON Schema
-	$(UV) run sentinel scenarios schema --out scenarios/schemas/scenario.schema.json
+	$(UV) run --frozen sentinel scenarios schema --out scenarios/schemas/scenario.schema.json
 
 clean: ## Remove generated artifacts and caches
 	rm -rf artifacts dist .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage
