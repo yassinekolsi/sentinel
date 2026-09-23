@@ -471,7 +471,7 @@ class SecurityState:
         allow_confidential: bool = False,
         allow_credentials: bool = False,
     ) -> list[dict[str, Any]]:
-        findings = []
+        findings: list[dict[str, Any]] = []
         prohibited_entries = [
             entry
             for entry in self.sensitive.values()

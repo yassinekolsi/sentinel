@@ -14,7 +14,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from sentinel.firewall.state import LABELED_SECRET, OPAQUE, SECRET_KEY, variants
+from sentinel.firewall.state import LABELED_SECRET, OPAQUE, is_secret_key, variants
 
 
 def read_live(path: Path) -> list[dict[str, Any]]:
@@ -48,7 +48,7 @@ def redact(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for child in value:
                 collect(child, key)
         elif isinstance(value, str):
-            if SECRET_KEY.search(key) and 1 <= len(value) <= 4096:
+            if is_secret_key(key) and 1 <= len(value) <= 4096:
                 values.add(value)
             values.update(m.group(1) for m in LABELED_SECRET.finditer(value))
             if key not in {"event_id", "run_id", "id", "action_digest"}:
