@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, ArrowLeft, ArrowRight, Check, ChevronDown, Layers3, Pause, Play, ShieldAlert } from "lucide-react";
 import runIndex from "@/data/index.json";
 import WorkflowPath from "./WorkflowPath";
+import LinearWorkflowPath from "./LinearWorkflowPath";
 
 type Run = (typeof runIndex)[number];
 type Event = { type: string; actor: string; run_id: string; step_id: number; seq: number; payload: Record<string, unknown>; provenance_refs?: string[] };
@@ -129,7 +130,9 @@ export default function Observatory() {
         <section className="workspace-card">
           <div className="case-bar"><div className="case-select-wrap"><span>CASE</span><select aria-label="Case" value={caseId} onChange={(event) => { setCaseId(event.target.value); setSelected(null); setPlaying(false); }}>{trace?.metadata.outcomes.map((item) => <option key={item.run_id} value={item.run_id}>{caseName(item.scenario_id)}</option>)}</select><ChevronDown size={16} /></div><div className="case-tags"><span className={outcome?.task_success ? "tag good" : "tag bad"}>TASK {outcome ? outcome.task_success ? "COMPLETE" : "INCOMPLETE" : "PENDING"}</span><span className={outcome?.attack_present ? outcome.attack_success ? "tag bad" : "tag good" : "tag neutral"}>{outcome?.attack_present ? outcome.attack_success ? "ATTACK SUCCEEDED" : "ATTACK PREVENTED" : "BENIGN TASK"}</span></div></div>
           <div className="goal-row"><span className="section-number">01</span><div><label>USER GOAL</label><p>{goal || "No user goal recorded"}</p></div></div>
-          <WorkflowPath key={caseId} steps={steps} selected={current?.id} outcome={outcome} onSelect={(id) => { setSelected(id); setPlaying(false); setTab("overview"); }} />
+          {runId === "invoice-rules" && outcome?.scenario_id === "enterprise_poisoned_invoice"
+            ? <WorkflowPath key={caseId} steps={steps} selected={current?.id} outcome={outcome} onSelect={(id) => { setSelected(id); setPlaying(false); setTab("overview"); }} />
+            : <LinearWorkflowPath steps={steps} selected={current?.id} onSelect={(id) => { setSelected(id); setPlaying(false); setTab("overview"); }} />}
           <div className="workspace-tabs"><button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Decision path</button><button className={tab === "events" ? "on" : ""} onClick={() => setTab("events")}>Full event stream <span>{events.length}</span></button></div>
           {tab === "overview" ? <>
             <div className="trace-toolbar"><div className="step-actions"><button aria-label="Previous step" disabled={currentIndex <= 0} onClick={() => move(-1)}><ArrowLeft size={16} /></button><button aria-label={playing ? "Pause replay" : "Play replay"} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={16} /> : <Play size={16} />}</button><button aria-label="Next step" disabled={currentIndex < 0 || currentIndex >= visible.length - 1} onClick={() => move(1)}><ArrowRight size={16} /></button></div></div>
