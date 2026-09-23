@@ -1,14 +1,15 @@
-# sentiel — evidence-first action firewall for SENTINEL
+# sentinel — evidence-first action firewall for SENTINEL
 
-`sentiel` checks each proposed tool-using agent action and returns **ALLOW**, **BLOCK**, **ESCALATE**,
+`sentinel-firewall` checks each proposed tool-using agent action and returns **ALLOW**, **BLOCK**, **ESCALATE**,
 or **REWRITE**, with inspectable reasons and outcomes. Structural enforcement is the default; the
 optional local semantic monitor remains experimental.
 
 **Latest versioned measurement:** the structural mock run at source revision
 `445529301bd017a719a0eb8d28ba1461939496b2` recorded 0/35 attack successes, 14/14 benign completions,
-and 8 unnecessary blocks across 49 scenarios. See the [result record](docs/evaluation-results/structural-mock-v1.md)
-for configuration, source and scenario identities, and regeneration commands. It measures the mock
-trajectories only; it is not a robustness guarantee.
+and 8 blocks on actions labeled legitimate by the reference plan across 49 scenarios. See the
+[result record](docs/evaluation-results/structural-mock-v1.md) for configuration, source and scenario
+identities, and regeneration commands. These are mock trajectories; the block count is an evaluator
+proxy, not a determination that those actions should have been allowed under attack context.
 
 Earlier real-Qwen probes are preserved as historical observations in
 [the phase audit](docs/phase-readiness.md). Their raw artifacts are gitignored and are not present
@@ -55,8 +56,8 @@ Linux, Windows, or WSL:
 
 ```sh
 uv sync --frozen --python 3.12
-uv run --frozen sentiel doctor
-uv run --frozen sentiel run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
+uv run --frozen sentinel-firewall doctor
+uv run --frozen sentinel-firewall run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
 ```
 
 This uses the committed `uv.lock`. Dependency installation needs network access; the mock run needs no
@@ -69,35 +70,50 @@ dependencies. It can install `uv` for that Python installation when requested:
 ```powershell
 .\scripts\setup-windows.ps1
 # If uv is absent: .\scripts\setup-windows.ps1 -InstallUv
-.\scripts\run-sentiel.ps1 doctor
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
+.\scripts\run-sentinel.ps1 doctor
+.\scripts\run-sentinel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
 ```
 
 For optional local-model runs, install Ollama and download `qwen3:8b` separately, then make its
 service available on loopback. The model adapter accepts loopback endpoints only. With `uv` on `PATH`, run:
 
 ```sh
-uv run --frozen sentiel run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
+uv run --frozen sentinel-firewall run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
 ```
 
 In native PowerShell, the equivalent wrapper command is:
 
 ```powershell
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
+.\scripts\run-sentinel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
 ```
 
 Model weights are not downloaded by setup or included in this repository. Inference settings and
 previous real-model observations are documented separately from mock results.
 
-## Browser observatory
+## Next.js observatory
+
+The recording frontend lives in `frontend/` and presents synthetic SENTINEL traces in a workflow view.
+From PowerShell at the repository root:
+
+```powershell
+.\scripts\start-observatory.ps1
+# Open http://127.0.0.1:3000
+```
+
+The script exports current redacted traces when raw run artifacts are available, builds the frontend,
+and serves it on loopback. It includes run groups, a clickable workflow, case selection, decision
+filters, search, source trust, candidate actions, interventions, and outcomes. Blocked attacks with
+incomplete tasks remain labeled incomplete.
+
+## Legacy single-trace browser export
 
 Every run prints its `events.live.jsonl` path. In another terminal:
 
 ```powershell
 $trace = 'artifacts\replace-with-printed-run-directory\events.live.jsonl'
-.\scripts\run-sentiel.ps1 dashboard $trace
+.\scripts\run-sentinel.ps1 dashboard $trace
 # Open http://127.0.0.1:8090
-.\scripts\run-sentiel.ps1 dashboard $trace --export-html artifacts\replay.html
+.\scripts\run-sentinel.ps1 dashboard $trace --export-html artifacts\replay.html
 ```
 
 The read-only dashboard provides run selection, search, decision filters, linked candidate → decision
@@ -108,14 +124,14 @@ Simulator logical timestamps and missing historical metadata are labeled honestl
 Offline exports are self-contained `RECORDED REPLAY` pages: no server, model, CDN, or internet needed.
 Use Previous/Next, arrow keys, or Play replay. Mock/real model, synthetic data, and simulated human
 labels remain visible. Presentation copies are redacted; raw artifacts are unchanged.
-The terminal viewer remains available as `sentiel view <trace> --follow` or `--decision block`.
+The terminal viewer remains available as `sentinel-firewall view <trace> --follow` or `--decision block`.
 
 ## Evaluation evidence
 
 Regenerate the static mock baseline without overwriting previous runs:
 
 ```sh
-uv run --frozen sentiel evaluate --scenarios scenarios --model mock --seed 0 --artifacts artifacts/reproductions
+uv run --frozen sentinel-firewall evaluate --scenarios scenarios --model mock --seed 0 --artifacts artifacts/reproductions
 ```
 
 Each run gets a unique timestamped directory containing the result, manifest, and raw traces. The
@@ -138,8 +154,8 @@ with the command above. Historical artifacts may be absent from a fresh checkout
 ```powershell
 $rulesRun = 'artifacts\replace-with-rules-directory'
 $allowRun = 'artifacts\replace-with-allow-directory'
-.\scripts\run-sentiel.ps1 bundle $rulesRun $allowRun --output artifacts\submission-v1
-.\scripts\run-sentiel.ps1 verify-bundle artifacts\submission-v1
+.\scripts\run-sentinel.ps1 bundle $rulesRun $allowRun --output artifacts\submission-v1
+.\scripts\run-sentinel.ps1 verify-bundle artifacts\submission-v1
 ```
 
 Open `index.html` in the bundle. It contains the actual source snapshot, source hashes, redacted

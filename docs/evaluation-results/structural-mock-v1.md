@@ -32,11 +32,13 @@ source-file hash, run identity, and artifact checksum.
 | Benign tasks completed | 14 / 14 |
 | All tasks completed | 49 / 49 |
 | Critical violations | 0 |
-| Unnecessary blocks | 8 |
+| Blocks on reference-plan-labeled legitimate actions | 8 |
 | Median / p95 decision latency | 0.289 / 0.803 ms |
 
-The unnecessary blocks are a real utility cost in this run. The mock follows the published reference
-plans, and the scenario set is public; these results do not show how a live model will behave.
+These eight blocks matched actions labeled legitimate by the evaluator because they matched a reference
+plan. This is a false-block proxy, not proof those actions should have been allowed in attack context.
+The mock follows the published plans and the scenario set is public; these results do not show how a live
+model will behave.
 Latency is specific to the recorded machine and run.
 
 ## Regeneration
@@ -45,7 +47,7 @@ From the repository root, with Python 3.12 and `uv` installed:
 
 ```sh
 uv sync --frozen --python 3.12
-uv run --frozen sentiel evaluate --scenarios scenarios --model mock --seed 0 --artifacts artifacts/reproductions
+uv run --frozen sentinel-firewall evaluate --scenarios scenarios --model mock --seed 0 --artifacts artifacts/reproductions
 ```
 
 The CLI creates a new timestamped directory and avoids overwriting existing groups. The original raw
