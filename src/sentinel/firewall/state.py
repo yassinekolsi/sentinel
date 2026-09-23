@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import base64
 import binascii
+import codecs
 import hashlib
+import html
 import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import unquote
 
 from sentinel.core.actions import CandidateAction
 from sentinel.core.provenance import Sensitivity, TrustLevel
 from sentinel.defenses.interface import DefenseRequest
 
-SECRET_KEY = re.compile(r"password|secret|token|credential|api[_ -]?key|recovery[_ -]?key", re.I)
 IDENTIFIER_KEY = re.compile(r"iban|account_number|national_id", re.I)
 STRUCTURAL_KEY = re.compile(r"(^id$|_id$|timestamp|created_at|updated_at|date$|time$)", re.I)
 LABELED_SECRET = re.compile(
@@ -24,8 +26,119 @@ LABELED_SECRET = re.compile(
 OPAQUE = re.compile(r"\b(?=[A-Za-z0-9_+/=-]{16,}\b)(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]+\b")
 BASE64_TOKEN = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
 HEX_TOKEN = re.compile(r"(?:[0-9a-fA-F]{2}){8,}")
+JS_ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]{1,6})\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2}))")
 MAX_DECODE_TOKENS = 128
 MAX_DECODED_CHARS = 262_144
+MAX_TRANSFORM_DEPTH = 3
+MAX_TRANSFORM_VIEWS = 64
+SECRET_KEY_PARTS = {"password", "secret", "token", "credential"}
+CONFUSABLE_TRANSLATION = str.maketrans(
+    {
+        chr(0x0410): "A",
+        chr(0x0412): "B",
+        chr(0x0421): "C",
+        chr(0x0415): "E",
+        chr(0x041D): "H",
+        chr(0x041A): "K",
+        chr(0x041C): "M",
+        chr(0x041E): "O",
+        chr(0x0420): "P",
+        chr(0x0422): "T",
+        chr(0x0425): "X",
+        chr(0x0406): "I",
+        chr(0x0408): "J",
+        chr(0x0405): "S",
+        chr(0x0430): "a",
+        chr(0x0432): "b",
+        chr(0x0441): "c",
+        chr(0x0435): "e",
+        chr(0x0456): "i",
+        chr(0x0458): "j",
+        chr(0x043A): "k",
+        chr(0x043C): "m",
+        chr(0x043E): "o",
+        chr(0x0440): "p",
+        chr(0x0455): "s",
+        chr(0x0442): "t",
+        chr(0x0445): "x",
+        chr(0x0443): "y",
+        chr(0x0391): "A",
+        chr(0x0392): "B",
+        chr(0x0395): "E",
+        chr(0x0396): "Z",
+        chr(0x0397): "H",
+        chr(0x0399): "I",
+        chr(0x039A): "K",
+        chr(0x039C): "M",
+        chr(0x039D): "N",
+        chr(0x039F): "O",
+        chr(0x03A1): "P",
+        chr(0x03A4): "T",
+        chr(0x03A5): "Y",
+        chr(0x03A7): "X",
+    }
+)
+MATCH_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "being",
+    "by",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "he",
+    "her",
+    "here",
+    "hers",
+    "him",
+    "his",
+    "i",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "its",
+    "may",
+    "might",
+    "must",
+    "no",
+    "not",
+    "of",
+    "on",
+    "or",
+    "our",
+    "she",
+    "should",
+    "that",
+    "the",
+    "their",
+    "them",
+    "this",
+    "to",
+    "until",
+    "was",
+    "we",
+    "were",
+    "will",
+    "with",
+    "would",
+    "you",
+    "your",
+}
 GENERIC_ENUMS = {
     "active",
     "approved",
@@ -49,8 +162,47 @@ _SENSITIVITY_RANK = {level.value: level.rank for level in Sensitivity} | {"unkno
 
 
 def normalized_text(value: str) -> str:
-    """Normalize copied prose without changing its words or order."""
-    return " ".join(unicodedata.normalize("NFC", value).casefold().split())
+    """Canonicalize Unicode, invisible format marks, and punctuation boundaries."""
+    translated = unicodedata.normalize("NFKC", value).translate(CONFUSABLE_TRANSLATION)
+    result = []
+    for char in translated:
+        if unicodedata.category(char) == "Cf":
+            continue
+        result.append(char.casefold() if char.isalnum() else " ")
+    return " ".join("".join(result).split())
+
+
+def compact_credential(value: str) -> str:
+    """Keep credential case while folding compatibility forms and separators."""
+    translated = unicodedata.normalize("NFKC", value).translate(CONFUSABLE_TRANSLATION)
+    return "".join(char for char in translated if unicodedata.category(char) != "Cf" and char.isalnum())
+
+
+def significant_tokens(value: str) -> set[str]:
+    return {word for word in normalized_text(value).split() if word not in MATCH_STOP_WORDS}
+
+
+def paraphrase_match(protected: str, payload: str) -> bool:
+    """Match strongly overlapping facts after word order and surface wording change."""
+    source = significant_tokens(protected)
+    output = significant_tokens(payload)
+    if len(source) < 6 or len(output) < 3:
+        return False
+    shared = source & output
+    required = 4 if len(source) >= 8 else 3
+    if len(shared) < required:
+        return False
+    if len(shared) / min(len(source), len(output)) < 0.6:
+        return False
+    if len(shared) / len(source) < 0.5:
+        return False
+    return any((token.isdigit() and len(token) >= 3) or len(token) >= 7 for token in shared)
+
+
+def is_secret_key(key: str) -> bool:
+    separated = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key)
+    parts = set(re.findall(r"[a-z0-9]+", separated.casefold()))
+    return bool(parts & SECRET_KEY_PARTS) or {"api", "key"} <= parts or {"recovery", "key"} <= parts
 
 
 def protected_candidates(value: str) -> list[tuple[str, str]]:
@@ -68,7 +220,13 @@ def protected_candidates(value: str) -> list[tuple[str, str]]:
 
 def variants(value: str) -> dict[str, str]:
     raw = value.encode()
-    return {"plain": value, "base64": base64.b64encode(raw).decode(), "hex": raw.hex(), "reversed": value[::-1]}
+    return {
+        "plain": value,
+        "base64": base64.b64encode(raw).decode(),
+        "hex": raw.hex(),
+        "reversed": value[::-1],
+        "rot13": codecs.encode(value, "rot_13"),
+    }
 
 
 def match_encoding(value: str, payload: str) -> str | None:
@@ -83,43 +241,84 @@ def match_encoding(value: str, payload: str) -> str | None:
     return None
 
 
+def decode_js_escapes(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        codepoint = next(group for group in match.groups() if group is not None)
+        try:
+            return chr(int(codepoint, 16))
+        except (ValueError, OverflowError):
+            return match.group()
+
+    return JS_ESCAPE.sub(replace, value)
+
+
 def decoded_payloads(payload: str) -> tuple[list[tuple[str, str]], bool]:
-    """Decode bounded text containers without relying on evaluator canary data."""
+    """Apply bounded, common text decoders, including short encoding chains."""
     decoded: list[tuple[str, str]] = []
+    queue: list[tuple[str, int, str]] = [(payload, 0, "")]
+    seen_text: set[str] = {payload}
     seen_tokens: set[tuple[str, str]] = set()
     used = 0
     exhausted = False
-    sources = [payload]
-    sources.extend("".join(line.split()) for line in payload.splitlines() if any(char.isspace() for char in line))
-    for source in sources:
-        for encoding, pattern in (("base64_container", BASE64_TOKEN), ("hex_container", HEX_TOKEN)):
-            for match in pattern.finditer(source):
-                token = match.group()
-                identity = (encoding, token)
-                if identity in seen_tokens:
-                    continue
-                seen_tokens.add(identity)
-                if len(seen_tokens) > MAX_DECODE_TOKENS:
-                    exhausted = True
+    while queue:
+        source, depth, prefix = queue.pop(0)
+        if depth >= MAX_TRANSFORM_DEPTH:
+            continue
+        candidates: list[tuple[str, str]] = []
+        for encoding, transform in (
+            ("html_entity", html.unescape),
+            ("url_percent", unquote),
+            ("javascript_escape", decode_js_escapes),
+        ):
+            try:
+                transformed = transform(source)
+            except (UnicodeError, ValueError):
+                continue
+            if transformed != source:
+                candidates.append((encoding, transformed))
+
+        sources = [source]
+        sources.extend("".join(line.split()) for line in source.splitlines() if any(char.isspace() for char in line))
+        for compact_source in sources:
+            for encoding, pattern in (("base64_container", BASE64_TOKEN), ("hex_container", HEX_TOKEN)):
+                for match in pattern.finditer(compact_source):
+                    token = match.group()
+                    identity = (encoding, token)
+                    if identity in seen_tokens:
+                        continue
+                    seen_tokens.add(identity)
+                    if len(seen_tokens) > MAX_DECODE_TOKENS:
+                        exhausted = True
+                        break
+                    try:
+                        raw = (
+                            bytes.fromhex(token)
+                            if encoding == "hex_container"
+                            else base64.b64decode(token + "=" * (-len(token) % 4), validate=True)
+                        )
+                        transformed = raw.decode("utf-8", "ignore")
+                    except (binascii.Error, ValueError):
+                        continue
+                    if transformed:
+                        candidates.append((encoding, transformed))
+                if exhausted:
                     break
-                try:
-                    raw = (
-                        bytes.fromhex(token)
-                        if encoding == "hex_container"
-                        else base64.b64decode(token + "=" * (-len(token) % 4), validate=True)
-                    )
-                    text = raw.decode("utf-8", "ignore")
-                except (binascii.Error, ValueError):
-                    continue
-                if not text:
-                    continue
-                used += len(text)
-                if used > MAX_DECODED_CHARS:
-                    exhausted = True
-                    break
-                decoded.append((encoding, text))
             if exhausted:
                 break
+
+        if exhausted:
+            break
+        for encoding, transformed in candidates:
+            if transformed in seen_text:
+                continue
+            seen_text.add(transformed)
+            used += len(transformed)
+            if len(seen_text) > MAX_TRANSFORM_VIEWS or used > MAX_DECODED_CHARS:
+                exhausted = True
+                break
+            label = f"{prefix}:{encoding}".strip(":")
+            decoded.append((label, transformed))
+            queue.append((transformed, depth + 1, label))
         if exhausted:
             break
     return decoded, exhausted
@@ -245,7 +444,7 @@ class SecurityState:
                 for index, child in enumerate(value):
                     walk(child, key, f"{path}[{index}]")
             elif isinstance(value, str):
-                if SECRET_KEY.search(key):
+                if is_secret_key(key):
                     remember(value, True, path)
                 elif IDENTIFIER_KEY.search(key) and evidence.sensitivity in {"confidential", "restricted", "unknown"}:
                     remember(value, False, path)
@@ -272,29 +471,43 @@ class SecurityState:
         allow_confidential: bool = False,
         allow_credentials: bool = False,
     ) -> list[dict[str, Any]]:
-        findings = []
+        findings: list[dict[str, Any]] = []
+        prohibited_entries = [
+            entry
+            for entry in self.sensitive.values()
+            if (entry.credential and not allow_credentials)
+            or (not entry.credential and external and not allow_confidential)
+        ]
+        if not prohibited_entries:
+            return findings
         decoded, exhausted = decoded_payloads(payload)
-        for entry in self.sensitive.values():
+        views = [("plain", payload), *decoded]
+        for entry in prohibited_entries:
             encoding = None
+            if not entry.credential:
+                for view_kind, content in views:
+                    if paraphrase_match(entry.value, content):
+                        encoding = f"{view_kind}:fact_overlap"
+                        break
+            compact_value = compact_credential(entry.value) if entry.credential else ""
+            if compact_value and len(compact_value) >= 8:
+                for view_kind, content in views:
+                    compact_payload = compact_credential(content)
+                    if compact_value in compact_payload:
+                        encoding = f"{view_kind}:compact_credential"
+                        break
             for candidate_kind, candidate in protected_candidates(entry.value):
-                if not entry.credential and normalized_text(candidate) in normalized_text(payload):
-                    encoding = "normalized:" + candidate_kind
-                    break
-                direct = match_encoding(candidate, payload)
-                if direct:
-                    encoding = direct if candidate_kind == "plain" else f"{candidate_kind}:{direct}"
-                    break
-                for container_encoding, content in decoded:
-                    inner_encoding = match_encoding(candidate, content)
-                    if inner_encoding:
-                        encoding = f"{container_encoding}:{candidate_kind}:{inner_encoding}"
+                for view_kind, content in views:
+                    if not entry.credential and normalized_text(candidate) in normalized_text(content):
+                        encoding = f"{view_kind}:normalized:{candidate_kind}"
+                        break
+                    direct = match_encoding(candidate, content)
+                    if direct:
+                        encoding = f"{view_kind}:{candidate_kind}:{direct}"
                         break
                 if encoding:
                     break
-            prohibited = (entry.credential and not allow_credentials) or (
-                not entry.credential and external and not allow_confidential
-            )
-            if encoding and prohibited:
+            if encoding:
                 evidence_ids = sorted(entry.evidence_ids)
                 findings.append(
                     {
@@ -307,7 +520,7 @@ class SecurityState:
                         "field_paths": sorted(entry.field_paths)[:8],
                     }
                 )
-        if exhausted and self.sensitive:
+        if exhausted and prohibited_entries:
             findings.append(
                 {
                     "encoding": "decode_budget_exceeded",

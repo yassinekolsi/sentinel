@@ -54,10 +54,12 @@ can be configured.
 
 Provenance is likewise supplied by the evaluator as evidence metadata, not inferred from the content
 it labels. Missing or incomplete provenance is classified as unknown. The firewall conservatively
-retains the most restrictive trust and sensitivity seen for a repeated protected value, recognizes
-explicit secret fields and selected field-aware sensitive data, and checks exact, normalized, excerpt,
-and bounded encoding matches. These checks do not establish which instructions caused an action; they
-are specific information-flow defenses, not general taint tracking.
+retains the most restrictive trust and sensitivity seen for a repeated protected value. Secret field
+names are classified by their components, and protected values are checked at output sinks after
+Unicode and separator normalization, common text unescaping, bounded encoding-chain decoding, and
+high-overlap fact matching for confidential text. Destination permissions and tool authority remain
+the structural controls. The [versioned boundary record](evaluation-results/firewall-boundary-hardening-v1.md)
+lists the exact synthetic request cases and measured outcomes; it does not rely on a local model.
 
 ## Avoiding accidental hard-coding in self-testing
 

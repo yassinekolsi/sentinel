@@ -36,8 +36,10 @@ flowchart LR
 
 - **Authority:** public policy determines tools and schemas. Six source trust levels survive memory
   writes and recall; observed text cannot grant itself authority.
-- **Data flow:** observed credentials and confidential copied prose are checked across plain, spaced,
-  base64, hex, reversed, and bounded decoded-container forms. External disclosure requires permission.
+- **Data flow:** observed credentials and confidential text are checked after Unicode, separator, and
+  common escape normalization, across bounded encoding chains, and against overlapping facts when
+  wording changes. Disclosure of protected values to external sinks requires permission. See the
+  [model-independent boundary results](docs/evaluation-results/firewall-boundary-hardening-v1.md).
 - **State:** payment/remediation prerequisites require matching successful observed operations.
   Approval binds to an exact versioned action hash and cannot override structural rejection.
 - **Recovery:** unconfirmed sends can become drafts; unsafe status changes can be removed. Replacements
@@ -145,6 +147,11 @@ measured source revision and scenario set. Mock follows published reference plan
 establish performance with a live model. For older real-model and semantic-monitor observations, see
 the [historical phase audit](docs/phase-readiness.md), with its evidence limits.
 
+To reproduce direct, model-independent firewall request measurements, run
+`uv run --frozen python scripts/evaluate-firewall-hardening.py`. The [boundary record](docs/evaluation-results/firewall-boundary-hardening-v1.md)
+includes development and frozen holdout results, per-case decisions, and latency measured inside
+`Firewall.decide`.
+
 ## Reproducibility and packaging
 
 New manifests record source identity, dirty-file hashes, effective configuration, model/runtime,
@@ -192,9 +199,10 @@ Model weights are separately installed and not redistributed. No personal or pro
 
 This synthetic-system prototype is not a production control or formal guarantee. It observes
 request-visible goals, conversation, tool results, provenance, policy, proposed actions, and history.
-It cannot inspect model internals. Copied-value checks can miss paraphrases, unknown encodings,
-or mislabeled information. Bounded state/context may lose evidence or cause refusal. Internal use
-assumes the simulator's audience policy; it is not full purpose-based authorization.
+It cannot inspect model internals. Detection decisions use the provenance and destination permissions
+provided at the request boundary. The model-independent boundary record identifies the synthetic cases
+and transformations measured by this repository. Internal use assumes the simulator's audience
+policy; it is not full purpose-based authorization.
 
 State/idempotence are process-local. Human approval is simulated, exact-action-bound, and cannot
 override structural restrictions. Semantic uncertainty blocks ordinary writes or escalates consequential

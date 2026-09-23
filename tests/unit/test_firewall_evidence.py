@@ -47,6 +47,14 @@ def test_presentation_redacts_secrets_used_as_object_keys():
     assert secret not in json.dumps(redact(events))
 
 
+def test_presentation_secret_key_detection_uses_field_components():
+    secret = "case-sensitive-key-9123AB"
+    events = [{"payload": {"accessToken": secret, "monkey": "ordinary phrase"}}]
+    rendered = json.dumps(redact(events))
+    assert secret not in rendered
+    assert "ordinary phrase" in rendered
+
+
 def test_cascade_gate_needs_complete_pairs_and_no_new_unsafe_allow():
     assert not gate([])["enable_cascade"]
     rows = []
