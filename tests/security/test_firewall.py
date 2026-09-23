@@ -1,5 +1,6 @@
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
@@ -249,3 +250,50 @@ def test_semantic_allow_propagates_monitor_confidence():
     assert result.decision is Decision.ALLOW
     assert result.confidence == 0.83
     assert result.metadata["confidence_semantics"] == "decision-path confidence; not safety probability"
+
+
+def test_execution_cleanup_supports_more_than_256_sequential_scopes() -> None:
+    firewall = Firewall()
+    for index in range(300):
+        execution_id = f"execution-{index}"
+        request = defense_request(tool_call("email_read", email_id="EM-2003"), execution_id=execution_id, step_id=1)
+        assert firewall.decide(request).decision is Decision.ALLOW
+        firewall.end_execution(execution_id)
+
+    assert firewall.states == {}
+    assert firewall.cache == {}
+
+
+def test_concurrent_execution_scopes_are_independent_and_releasable() -> None:
+    firewall = Firewall()
+    execution_ids = [f"parallel-{index}" for index in range(32)]
+    requests = [
+        defense_request(tool_call("email_read", email_id="EM-2003"), execution_id=execution_id, step_id=1)
+        for execution_id in execution_ids
+    ]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        decisions = list(pool.map(firewall.decide, requests))
+
+    assert all(decision.decision is Decision.ALLOW for decision in decisions)
+    assert len(firewall.states) == 32
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(firewall.end_execution, execution_ids))
+    assert firewall.states == {}
+    assert firewall.cache == {}
+
+
+def test_execution_capacity_fails_closed_without_evicting_live_state() -> None:
+    firewall = Firewall()
+    firewall.MAX_ACTIVE_EXECUTIONS = 2
+    first = defense_request(tool_call("email_read", email_id="EM-2003"), execution_id="capacity-a")
+    second = first.model_copy(update={"execution_id": "capacity-b"})
+    rejected = first.model_copy(update={"execution_id": "capacity-c"})
+    assert firewall.decide(first).decision is Decision.ALLOW
+    assert firewall.decide(second).decision is Decision.ALLOW
+    assert firewall.decide(rejected).reason_codes == ["RUN_CAPACITY_EXCEEDED"]
+    assert set(firewall.states) == {"capacity-a", "capacity-b"}
+
+    firewall.end_execution("capacity-a")
+    replacement = first.model_copy(update={"execution_id": "capacity-d"})
+    assert firewall.decide(replacement).decision is Decision.ALLOW
+    assert set(firewall.states) == {"capacity-b", "capacity-d"}

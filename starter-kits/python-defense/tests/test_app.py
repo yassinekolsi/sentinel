@@ -1,6 +1,7 @@
 import pytest
 from app.main import app
 from app.models import MAX_METADATA_BYTES, DefenseDecision
+from app.request_limits import MAX_REQUEST_BODY_BYTES
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -70,6 +71,15 @@ def test_unknown_request_fields_are_ignored() -> None:
 
 def test_malformed_request_is_rejected() -> None:
     assert client.post("/v1/decision", json={"run_id": "r"}).status_code == 422
+
+
+def test_oversized_request_is_rejected_before_validation() -> None:
+    response = client.post(
+        "/v1/decision",
+        content=b"x" * (MAX_REQUEST_BODY_BYTES + 1),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 413
 
 
 @pytest.mark.parametrize("code", ["user_goal_aligned", "injection-detected", "A"])

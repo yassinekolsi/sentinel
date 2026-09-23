@@ -12,7 +12,10 @@ from sentinel.config import CompetitionConfig, DefenseRuntimeConfig, FailMode
 from sentinel.core.actions import Decision
 from sentinel.defenses.baselines import ProvenanceDefense
 from sentinel.defenses.client import DefenseUnavailable, HttpDefense
+from sentinel.defenses.interface import MAX_DEFENSE_REQUEST_BYTES
 from sentinel.evaluator.runner import RunConfig, evaluate, load_suite, run_scenario
+from sentinel.firewall.app import create_app
+from sentinel.firewall.engine import Firewall
 from sentinel.sandbox.submission import sample_defense_request, validate_submission
 from tests.conftest import PUBLIC, ROOT, load, tool_call
 from tests.integration.helpers import free_port, serve
@@ -55,6 +58,36 @@ def test_transport_failures_are_retried_but_bad_responses_are_not() -> None:
         broken.decide(sample_defense_request())
     assert errors["n"] == 1
     assert broken.decide_or_fallback(sample_defense_request()).decision is Decision.BLOCK
+
+
+def test_http_client_releases_more_than_256_completed_firewall_runs() -> None:
+    firewall = Firewall()
+    with serve(create_app(firewall=firewall)) as url:
+        defense = HttpDefense(url, transport_retries=0)
+        try:
+            for index in range(300):
+                execution_id = f"http-execution-{index}"
+                request = sample_defense_request().model_copy(update={"execution_id": execution_id})
+                assert defense.decide(request).decision is Decision.ALLOW
+                defense.end_execution(execution_id)
+            assert firewall.states == {}
+            assert firewall.cache == {}
+            assert defense.cleanup_failures == 0
+        finally:
+            defense.close()
+
+
+def test_oversized_http_body_is_rejected_before_firewall_state_is_created() -> None:
+    firewall = Firewall()
+    with serve(create_app(firewall=firewall)) as url:
+        response = httpx.post(
+            f"{url}/v1/decision",
+            content=b"x" * (MAX_DEFENSE_REQUEST_BYTES + 1),
+            headers={"content-type": "application/json"},
+        )
+
+    assert response.status_code == 413
+    assert firewall.states == {}
 
 
 def test_unreachable_defense_fails_closed() -> None:
