@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>sentiel / action observatory</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1016;--panel:#121b25;--line:#2a3948;--muted:#a4b4c5;--text:#edf3f8;--mint:#83edc5;--red:#ff9f9f;--amber:#ffcf83;--blue:#94cfff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,sans-serif}header{border-bottom:1px solid var(--line);padding:24px 4vw;display:flex;justify-content:space-between;gap:24px;align-items:center}h1{font-size:28px;letter-spacing:-1px;margin:0}h1 span{color:var(--mint)}.eyebrow{font:11px ui-monospace,monospace;letter-spacing:2px;color:var(--muted);text-transform:uppercase}.subtitle{color:var(--muted);font-size:12px;margin:6px 0 0}.badge{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:4px 9px;font:12px ui-monospace,monospace;margin:3px;color:var(--blue)}main{max-width:1600px;margin:auto;padding:24px 4vw}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.metric{border:1px solid var(--line);background:var(--panel);padding:14px 18px;border-radius:8px}.metric strong{font-size:25px;display:block}.metric small{color:var(--muted)}.toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0;align-items:end}label{color:var(--muted);font-size:12px;display:flex;flex-direction:column;gap:5px}input,select,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);padding:9px 12px;border-radius:5px}button{cursor:pointer}button:hover,button:focus-visible{border-color:var(--mint)}button:disabled{opacity:.4;cursor:default}input{min-width:230px}#search-label{flex:1}#search{width:100%}.workspace{display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px}.timeline{max-height:74vh;overflow:auto;padding-right:6px}.step{display:block;text-align:left;width:100%;margin-bottom:8px;border-left:3px solid var(--line);padding:12px}.step.active{background:#1b2c38;border-color:var(--mint)}.step b{display:block;margin:4px 0;overflow-wrap:anywhere}.step small{color:var(--muted)}.allow{color:var(--mint)}.block{color:var(--red)}.escalate{color:var(--amber)}.rewrite{color:var(--blue)}.detail{min-width:0}.card{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:20px;margin-bottom:14px}.card h2{font-size:19px;margin:0 0 12px}.card h3{font-size:13px;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:1px}.flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.flow .card{border-top:3px solid var(--line)}pre{font:12px/1.65 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;max-height:420px;overflow:auto}p{overflow-wrap:anywhere}details{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}summary{cursor:pointer;color:var(--blue)}.reason{padding:8px 0;font-family:ui-monospace,monospace;font-size:12px}.empty{padding:32px;text-align:center;color:var(--muted)}#connection{color:var(--muted);font-size:12px}.verdict{border-left:3px solid var(--mint)}#goal{margin:8px 0 0}footer{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding:18px 4vw}a{color:var(--blue)}.provenance{width:100%;border-collapse:collapse;font-size:12px}.provenance th,.provenance td{text-align:left;border-bottom:1px solid var(--line);padding:7px;overflow-wrap:anywhere}.scroll{overflow:auto}@media(max-width:1000px){.workspace{grid-template-columns:240px minmax(0,1fr)}.flow{grid-template-columns:1fr}}@media(max-width:700px){header{display:block}.workspace{grid-template-columns:1fr}.timeline{max-height:280px}.metrics{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header><div><div class="eyebrow">Evidence-first action firewall</div><h1>sentiel<span>.</span> <span style="font-weight:400;color:var(--muted)">observatory</span></h1><p class="subtitle">Follow the source. Inspect the decision. Verify the outcome.</p></div><div><span class="badge" id="stream"></span><span class="badge" id="model"></span><span class="badge" id="mode"></span><div id="connection" role="status" aria-live="polite"></div></div></header>
+<main>
+<div class="toolbar"><label>Recorded run<select id="run"></select></label><label id="search-label">Search evidence<input id="search" type="search" placeholder="Tool, reason, source, or observed text…"></label><label>Decision<select id="decision"><option value="">All decisions</option value="allow">ALLOW</option><option value="block">BLOCK</option><option value="escalate">ESCALATE</option><option value="rewrite">REWRITE</option></select></label><button id="previous">← Previous</button><button id="next">Next →</button><button id="play">Play replay</button></div>
+<div class="card"><div class="eyebrow">Authenticated user goal</div><p id="goal">Waiting for a user message.</p></div>
+<div class="metrics"><div class="metric"><strong id="actions">0</strong><small>Candidate decisions</small></div><div class="metric"><strong id="interventions">0</strong><small>Block / escalate / rewrite</small></div><div class="metric"><strong id="task">Pending</strong><small>Legitimate task · evaluator</small></div><div class="metric"><strong id="attack">Unmeasured</strong><small>Attack outcome · evaluator</small></div></div>
+<div id="verdict" class="card verdict"></div>
+<div class="workspace"><nav id="timeline" class="timeline" aria-label="Action steps"></nav><section id="detail" class="detail" aria-label="Selected step"></section></div>
+</main>
+<footer>synthetic data | simulated human approvals | Uncalibrated risk and confidence, not probabilities of safety. Presentation redaction is best effort. Event timestamps are simulator logical time. Evaluation labels never enter defense decisions.</footer>
+<script type="application/json" id="trace-data">__TRACE_DATA__</script>
+<script>
+"use strict";
+let data=JSON.parse(document.getElementById('trace-data').textContent), selected=null, shown=[], timer=null;
+const live=Boolean(data.live), $=id=>document.getElementById(id), pretty=x=>JSON.stringify(x,null,2);
+function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function box(title,value){const n=el('article',undefined,'card');n.append(el('h3',title),el('pre',typeof value==='string'?value:pretty(value)));return n;}
+function details(title,value){const n=el('details');n.append(el('summary',title),el('pre',pretty(value)));return n;}
+function payload(e){return e.payload&&typeof e.payload==='object'?e.payload:{};}
+function current(){return data.events.filter(e=>e.run_id===$('run').value);}
+function groups(events){const m=new Map();events.forEach(e=>{if(!m.has(e.step_id))m.set(e.step_id,[]);m.get(e.step_id).push(e);});return [...m].map(([step,events])=>({step,events,decision:events.find(e=>e.type==='defense_decision')}));}
+function selectStep(step){selected=step;render();}
+function render(){
+ const ids=[...new Set(data.events.map(e=>e.run_id))], old=$('run').value;
+ if([...$('run').options].map(o=>o.value).join('\n')!==ids.join('\n')){$('run').replaceChildren(...ids.map(id=>{const o=el('option',id);o.value=id;return o;}));if(ids.includes(old))$('run').value=old;}
+ const meta=data.metadata||{}, model=meta.model||'unknown';
+ $('stream').textContent=live?'LIVE FILE · POLLING':'RECORDED REPLAY';
+ $('model').textContent=model==='mock'?'MOCK · REFERENCE PLANS':model==='unknown'?'MODEL UNKNOWN':'REAL MODEL · '+model;
+ $('mode').textContent=(meta.mode||'unknown').toUpperCase()+' · '+(meta.attack_mode==='adaptive'?'SCHEDULED ADAPTIVE':(meta.attack_mode||'unknown schedule').toUpperCase());
+ const events=current(), decisions=events.filter(e=>e.type==='defense_decision'), all=groups(events);
+ $('goal').textContent=events.filter(e=>e.type==='user_message').map(e=>payload(e).text).join('\n\n')||'Waiting for a user message.';
+ $('actions').textContent=decisions.length;
+ const counts=['block','escalate','rewrite'].map(d=>decisions.filter(e=>payload(e).decision===d).length);
+ $('interventions').textContent=counts.join(' / ');
+ const outcome=(meta.outcomes||[]).find(o=>o.run_id===$('run').value), terminal=events.findLast(e=>['task_success','task_failure'].includes(e.type));
+ $('task').textContent=terminal?(terminal.type==='task_success'?'Completed':'Incomplete'):'Pending';
+ $('attack').textContent=outcome?(outcome.attack_present?(outcome.attack_success?'Succeeded':'No success'):'Benign task'):'Unmeasured';
+ const exposure=outcome?(meta.exposure||{})[outcome.scenario_id]:null;
+ $('verdict').replaceChildren(el('h3','Measured outcome'));
+ $('verdict').append(el('p',terminal?payload(terminal).summary+' · termination: '+payload(terminal).termination:'No final task verdict recorded. A blocked action alone does not establish task completion or attack resistance.'));
+ if(exposure)$('verdict').append(el('p','Exact attack payload observed: '+(exposure.exact_payload_observed?'yes':'no')+'. This measures retrieval exposure, not attack success.'));
+ if(model==='mock')$('verdict').append(el('p','Controlled reference-plan trajectories; these results do not establish real-LLM robustness.'));
+ const q=$('search').value.toLowerCase(), decision=$('decision').value;
+ shown=all.filter(g=>(!decision||(g.decision&&payload(g.decision).decision===decision))&&(!q||pretty(g.events).toLowerCase().includes(q)));
+ if(!shown.some(g=>g.step===selected))selected=shown.length?shown[0].step:null;
+ $('timeline').replaceChildren();
+ shown.forEach(g=>{const p=g.decision?payload(g.decision):{}, action=p.action||{}, b=el('button',undefined,'step'+(g.step===selected?' active':''));b.setAttribute('aria-pressed',String(g.step===selected));b.append(el('small','STEP '+g.step+' · '+g.events.length+' events'),el('b',action.tool||action.type||(g.step===0?'User context':'Context / result')),el('span',p.decision?p.decision.toUpperCase():'EVIDENCE',p.decision||''));b.onclick=()=>selectStep(g.step);$('timeline').append(b);});
+ if(!shown.length)$('timeline').append(el('div','No steps match these filters.','empty'));
+ const index=shown.findIndex(g=>g.step===selected);$('previous').disabled=index<=0;$('next').disabled=index<0||index>=shown.length-1;
+ $('detail').replaceChildren();const g=shown[index];if(!g)return;
+ const p=g.decision?payload(g.decision):null;
+ if(p){const flow=el('div',undefined,'flow');flow.append(box('1 · Candidate action',p.action));const d=el('article',undefined,'card');d.append(el('h3','2 · Defense decision'),el('h2',String(p.decision).toUpperCase(),p.decision),el('p','Risk '+p.risk_score+' · confidence '+p.confidence),el('div',(p.reason_codes||[]).join(' / '),'reason'),el('p',p.explanation||''));if(p.latency_ms!==undefined)d.append(el('p',Number(p.latency_ms).toFixed(3)+' ms · defense only'));flow.append(d);
+ const results=g.events.filter(e=>['tool_result','retrieval_result','model_output','human_confirmation','memory_write'].includes(e.type));flow.append(box('3 · Observed outcome',results.length?results.map(e=>({event:e.type,...payload(e)})):p.decision==='block'?'Action blocked; no tool execution or response emitted.':'No execution outcome recorded for this step.'));$('detail').append(flow);
+ if(p.rewritten_action)$('detail').append(box('Rechecked replacement',p.rewritten_action));
+ const evidence=el('article',undefined,'card');evidence.append(el('h3','Authority & data flow'));
+ const provenance=p.provenance||[];
+ if(provenance.length){const table=el('table',undefined,'provenance'), row=el('tr');['Reference','Source','Trust','Sensitivity'].forEach(x=>row.append(el('th',x)));table.append(row);provenance.forEach(r=>{const v=r.provenance||{},tr=el('tr');[r.id,v.source_id,v.trust_level,v.sensitivity].forEach(x=>tr.append(el('td',x||'unknown')));table.append(tr);});const scroll=el('div',undefined,'scroll');scroll.append(table);evidence.append(scroll);}else evidence.append(el('p','Source classifications were not recorded in this historical event.'));
+ evidence.append(details('Decision evidence / metadata',p.metadata||{}));$('detail').append(evidence);}
+ const raw=el('article',undefined,'card');raw.append(el('h3','Complete step evidence'));
+ g.events.forEach(e=>{const d=details(e.type+' · '+e.actor+' · seq '+e.seq,e);if(!p)d.open=true;raw.append(d);});$('detail').append(raw);
+}
+$('run').onchange=()=>{selected=null;render();};$('search').oninput=render;$('decision').onchange=render;
+function move(delta){const index=shown.findIndex(g=>g.step===selected);if(shown[index+delta])selectStep(shown[index+delta].step);}
+$('previous').onclick=()=>move(-1);$('next').onclick=()=>move(1);
+function stop(){clearInterval(timer);timer=null;$('play').textContent='Play replay';}
+$('play').onclick=()=>{if(timer){stop();return;}if(shown.length&&selected===shown[shown.length-1].step)selectStep(shown[0].step);$('play').textContent='Pause replay';timer=setInterval(()=>{if(!shown.length||selected===shown[shown.length-1].step){stop();return;}move(1);},1600);};
+document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;if(e.key==='ArrowRight')move(1);if(e.key==='ArrowLeft')move(-1);});
+async function poll(){try{const response=await fetch('/api/trace',{cache:'no-store'});if(!response.ok)throw new Error('Trace read failed');data=await response.json();render();$('connection').textContent='Connected · refreshed '+new Date().toLocaleTimeString()+' · live file, not proof of live inference';}catch(err){$('connection').textContent='DISCONNECTED · showing last received evidence';}setTimeout(poll,1500);}
+render();if(live){$('play').hidden=true;poll();}else $('connection').textContent='Offline replay · no network or model calls';
+</script>
+</body></html>

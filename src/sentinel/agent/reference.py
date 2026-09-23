@@ -323,6 +323,7 @@ class ReferenceAgent:
                 if decision.rewritten_action
                 else None,
                 "defense_error": error,
+                "provenance": [record.model_dump(mode="json") for record in request.provenance],
                 "metadata": decision.metadata,
             },
         )
@@ -353,9 +354,25 @@ class ReferenceAgent:
                     text = "The response contains protected information. Complete the original task without it."
                 else:
                     text = "The final response was blocked by the safety policy. Complete the original task safely."
+                text += (
+                    " The rejected response was not delivered and did not execute any tool."
+                    " Review the original user goal and the successful tool results."
+                    " Use the permitted tools to finish any remaining work without the protected information."
+                    " Do not claim an operation happened unless a successful tool result confirms it."
+                )
             else:
                 text = f"Action blocked by safety layer ({', '.join(decision.reason_codes) or 'no reason'})."
             obs = Observation(FeedbackKind.BLOCKED, text)
+            self.log.append(
+                EventType.SAFETY_FEEDBACK,
+                Actor.DEFENSE,
+                step_id,
+                {
+                    "text": text,
+                    "final_response_recovery": action.final,
+                    "remaining_final_retries": max(0, 2 - self._final_recovery_attempts + 1) if action.final else None,
+                },
+            )
             self._remember("safety", obs)
             # Do not echo a rejected final payload through the trusted safety
             # channel; the model already produced it and only needs the template.

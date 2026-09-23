@@ -213,6 +213,44 @@ def view(
 
 
 @app.command()
+def dashboard(
+    artifact: Path,
+    export_html: Path | None = None,
+    port: int = 8090,
+) -> None:
+    """Open a read-only loopback dashboard, or export a self-contained interactive replay."""
+    from sentinel.firewall.dashboard import create_dashboard, export_dashboard
+
+    if export_html:
+        export_dashboard(artifact, export_html)
+        typer.echo(f"interactive replay: {export_html}")
+    else:
+        import uvicorn
+
+        typer.echo(f"observatory: http://127.0.0.1:{port} (read-only trace polling)")
+        uvicorn.run(create_dashboard(artifact), host="127.0.0.1", port=port)
+
+
+@app.command()
+def bundle(runs: list[Path], output: Path = typer.Option(...)) -> None:
+    """Package current source and selected redacted replays, excluding technical report and video."""
+    from sentinel.firewall.bundle import build_bundle
+
+    typer.echo(f"verified bundle: {build_bundle(find_root(), runs, output)}")
+
+
+@app.command()
+def verify_bundle(directory: Path) -> None:
+    """Verify every packaged file against the bundle checksum manifest."""
+    from sentinel.firewall.bundle import verify_bundle as verify
+
+    result = verify(directory)
+    typer.echo(json.dumps(result, indent=2))
+    if not result["ok"]:
+        raise typer.Exit(1)
+
+
+@app.command()
 def thinking(
     cases: Path = Path("experiments/semantic-cases.json"),
     model: str = "qwen3:8b",

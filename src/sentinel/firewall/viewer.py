@@ -48,7 +48,7 @@ def redact(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for child in value:
                 collect(child, key)
         elif isinstance(value, str):
-            if SECRET_KEY.search(key) and 8 <= len(value) <= 512 and len(value.split()) == 1:
+            if SECRET_KEY.search(key) and 1 <= len(value) <= 4096:
                 values.add(value)
             values.update(m.group(1) for m in LABELED_SECRET.finditer(value))
             if key not in {"event_id", "run_id", "id", "action_digest"}:
@@ -57,7 +57,7 @@ def redact(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     collect(events)
     patterns = [
         re.compile(r"\s*".join(re.escape(c) for c in encoded), re.I if kind == "hex" else 0)
-        for value in values
+        for value in sorted(values, key=lambda value: (-len(value), value))
         for kind, encoded in variants(value).items()
     ]
 

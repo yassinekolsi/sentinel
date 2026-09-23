@@ -68,6 +68,11 @@ def test_blocked_final_can_recover_without_echoing_sensitive_content() -> None:
     assert len(blocked) == 1
     assert LEAK not in blocked[0].observation.text
     assert blocked[0].action is None
+    feedback_events = [event for event in run.log if event.type.value == "safety_feedback"]
+    assert len(feedback_events) == 1
+    assert LEAK not in feedback_events[0].payload["text"]
+    assert "successful tool result" in feedback_events[0].payload["text"]
+    assert feedback_events[0].payload["remaining_final_retries"] == 2
 
 
 def test_blocked_final_recovery_is_bounded_to_two_retries() -> None:

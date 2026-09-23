@@ -29,6 +29,20 @@ def test_default_tag_is_the_reference_model() -> None:
     assert DEFAULT_OLLAMA_MODEL == "qwen3:8b"
 
 
+@pytest.mark.parametrize(
+    "host", ["https://remote.example", "http://192.168.1.2", "http://user@localhost", "http://localhost/x"]
+)
+def test_agent_cannot_send_synthetic_records_to_a_remote_endpoint(host):
+    with pytest.raises(ValueError, match="local"):
+        OllamaModelAdapter(host=host)
+
+
+@pytest.mark.parametrize("body", [[], {}, {"message": []}, {"message": {"content": None}}])
+def test_malformed_envelopes_enter_bounded_model_recovery(body):
+    with pytest.raises(ModelError):
+        adapter(lambda request: httpx.Response(200, json=body)).propose(context())
+
+
 def test_it_sends_the_kit_prompt_and_tool_schemas() -> None:
     seen: dict = {}
 

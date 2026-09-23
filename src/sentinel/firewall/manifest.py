@@ -22,9 +22,39 @@ def sha256(path: Path) -> str:
 def source_identity(root: Path) -> dict[str, Any]:
     def git(*args: str) -> str:
         # Fixed read-only commands; args are code constants, never request content.
-        return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()  # noqa: S603, S607
+        return subprocess.check_output(  # noqa: S603
+            ["git", "-C", str(root), *args],  # noqa: S607
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
 
-    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain"))}
+    try:
+        if Path(git("rev-parse", "--show-toplevel")).resolve() != root.resolve():
+            raise ValueError("not the source repository root")
+        commit: str | None = git("rev-parse", "HEAD")
+        dirty: bool | None = bool(git("status", "--porcelain"))
+        files = git("ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
+        origin = "git working tree"
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        marker = root / ".sentiel-source.json"
+        archived = json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else {}
+        files = list(archived.get("file_sha256", {}))
+        commit, dirty, origin = archived.get("commit"), None, "source archive" if archived else "unversioned directory"
+    hashes = {
+        name: sha256(root / name)
+        for name in sorted(set(files))
+        if name
+        and (root / name).resolve().is_relative_to(root.resolve())
+        and (root / name).is_file()
+        and not (root / name).is_symlink()
+    }
+    return {
+        "commit": commit,
+        "dirty": dirty,
+        "origin": origin,
+        "file_sha256": hashes,
+        "tree_sha256": hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest(),
+    }
 
 
 def runtime_snapshot() -> dict[str, Any]:
@@ -51,7 +81,7 @@ def new_manifest(root: Path, config: dict[str, Any], *, runtime: bool) -> dict[s
         "wire_schema_version": WIRE_SCHEMA_VERSION,
         "effective_config": config,
         "warmup": "not performed by CLI; cold load included unless external warmup documented",
-        "harness": "exact approval-v1; unique execution ID; two blocked-final recovery retries",
+        "harness": "exact approval-v1; unique execution ID; two blocked-final retries; completion feedback-v2",
         "runs": [],
     }
 

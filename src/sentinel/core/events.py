@@ -21,6 +21,7 @@ class EventType(StrEnum):
     TOOL_RESULT = "tool_result"
     MODEL_OUTPUT = "model_output"
     DEFENSE_DECISION = "defense_decision"
+    SAFETY_FEEDBACK = "safety_feedback"
     HUMAN_CONFIRMATION = "human_confirmation"
     POLICY_VIOLATION = "policy_violation"
     TASK_SUCCESS = "task_success"

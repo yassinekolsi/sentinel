@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -43,8 +44,14 @@ class OllamaModelAdapter(ModelAdapter):
     ) -> None:
         self._model = model
         self._seed = seed
+        endpoint = (host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/")
+        parsed = urlparse(endpoint)
+        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            raise ValueError("agent host must be a local HTTP loopback address")
+        if parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path:
+            raise ValueError("invalid local host URL")
         self._client = httpx.Client(
-            base_url=(host or os.environ.get("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/"),
+            base_url=endpoint,
             timeout=timeout_s,
             transport=transport,
             trust_env=False,
@@ -89,7 +96,11 @@ class OllamaModelAdapter(ModelAdapter):
             ) from exc
         except json.JSONDecodeError as exc:
             raise ModelError(f"Ollama returned a non-JSON body: {exc}") from exc
-        text = str((body.get("message") or {}).get("content", ""))
+        if not isinstance(body, dict) or not isinstance(body.get("message"), dict):
+            raise ModelError("Ollama returned no message object")
+        text = body["message"].get("content")
+        if not isinstance(text, str):
+            raise ModelError("Ollama returned no text content")
         return parse_action(text, {str(t["name"]) for t in self._tools})
 
     def observe(self, feedback: Feedback) -> None:
