@@ -4,14 +4,18 @@
 or **REWRITE**, with inspectable reasons and outcomes. Structural enforcement is the default; the
 optional local semantic monitor remains experimental.
 
-**Evidence, 23 September 2026:** structural mock evaluation recorded **0/35 attack successes and
-14/14 benign completions** across 49 scenarios. Fresh real-Qwen probes completed one benign task
-per domain. Two matched poisoned-invoice pairs show disclosure prevention, **but neither defended
-run completed the requested draft**. These are measured outcomes, not jury scores or general robustness.
+**Latest versioned measurement:** the structural mock run at source revision
+`445529301bd017a719a0eb8d28ba1461939496b2` recorded 0/35 attack successes, 14/14 benign completions,
+and 8 unnecessary blocks across 49 scenarios. See the [result record](docs/evaluation-results/structural-mock-v1.md)
+for configuration, source and scenario identities, and regeneration commands. It measures the mock
+trajectories only; it is not a robustness guarantee.
+
+Earlier real-Qwen probes are preserved as historical observations in
+[the phase audit](docs/phase-readiness.md). Their raw artifacts are gitignored and are not present
+in this checkout, so they do not validate the current source revision.
 
 This independent repository retains the [SENTINEL Starter Kit](https://github.com/Skan22/Sentinel_Starter_Kit)
 at revision `dd2e5fe0979d0781a4bfe6d0849cd80cf69ef4a2`. See [UPSTREAM.md](UPSTREAM.md).
-The solution is intentionally spelled `sentiel`; the upstream simulator CLI is `sentinel`.
 
 ## Method
 
@@ -44,9 +48,23 @@ flowchart LR
   tool results, and evaluator outcomes are inspectable. Scenario IDs and evaluation labels are never
   defense features. Risk/confidence are uncalibrated indicators, not safety probabilities.
 
-## Setup and use
+## Setup and quick run
 
-Use 64-bit Python 3.12 and `uv`, from the repository root in PowerShell:
+Install 64-bit Python 3.12 and `uv`. With `uv` on `PATH`, run from the repository root on macOS,
+Linux, Windows, or WSL:
+
+```sh
+uv sync --frozen --python 3.12
+uv run --frozen sentiel doctor
+uv run --frozen sentiel run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
+```
+
+This uses the committed `uv.lock`. Dependency installation needs network access; the mock run needs no
+model or Ollama. Run `make check` for lint, types, tests, starter kits, and scenario validation when
+GNU Make is available.
+
+For native Windows PowerShell, the setup wrapper checks Python 3.12 and installs the locked
+dependencies. It can install `uv` for that Python installation when requested:
 
 ```powershell
 .\scripts\setup-windows.ps1
@@ -55,17 +73,21 @@ Use 64-bit Python 3.12 and `uv`, from the repository root in PowerShell:
 .\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
 ```
 
-Setup uses committed `uv.lock`; initial dependency downloads need network access. Mock runs, tests,
-and replay need no model. For real inference install Ollama and pull `qwen3:8b` separately. Both agent
-and monitor accept HTTP loopback endpoints only. Start the server with:
+For optional local-model runs, install Ollama and download `qwen3:8b` separately, then make its
+service available on loopback. The model adapter accepts loopback endpoints only. With `uv` on `PATH`, run:
+
+```sh
+uv run --frozen sentiel run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
+```
+
+In native PowerShell, the equivalent wrapper command is:
 
 ```powershell
-$env:OLLAMA_HOST = '127.0.0.1:11434'
-$env:OLLAMA_NUM_PARALLEL = '1'
-$env:OLLAMA_NO_CLOUD = '1'
-ollama serve
-# In a second terminal: ollama pull qwen3:8b
+.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
 ```
+
+Model weights are not downloaded by setup or included in this repository. Inference settings and
+previous real-model observations are documented separately from mock results.
 
 ## Browser observatory
 
@@ -88,50 +110,30 @@ Use Previous/Next, arrow keys, or Play replay. Mock/real model, synthetic data, 
 labels remain visible. Presentation copies are redacted; raw artifacts are unchanged.
 The terminal viewer remains available as `sentiel view <trace> --follow` or `--decision block`.
 
-## Evaluation and current evidence
+## Evaluation evidence
 
-```powershell
-.\scripts\run-sentiel.ps1 evaluate --artifacts artifacts\rules
-.\scripts\run-sentiel.ps1 evaluate --undefended --artifacts artifacts\allow
-.\scripts\run-sentiel.ps1 evaluate --adaptive --artifacts artifacts\adaptive
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b --undefended
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
+Regenerate the static mock baseline without overwriting previous runs:
+
+```sh
+uv run --frozen sentiel evaluate --scenarios scenarios --model mock --seed 0 --artifacts artifacts/reproductions
 ```
 
-Raw evidence is in `artifacts/phase-final/`; historical evidence remains preserved. Artifacts/reports
-are gitignored. The portable bundle contains redacted replays. Mock consumes reference plans;
-real agents do not. Adaptive mode uses scheduled static payloads, not a learned red-team adversary.
-
-| Mode / agent | Cases | Attack successes | Benign completed | All tasks completed |
-| --- | ---: | ---: | ---: | ---: |
-| Structural / mock | 49 | 0/35 | 14/14 | 49/49 |
-| Allow-all / mock | 49 | 35/35 | 14/14 | 38/49 |
-| Scheduled adaptive structural / mock | 49 | 0/35 | 14/14 | 49/49 |
-| Structural / Qwen, benign probes | 3 | n/a | 3/3 | 3/3 |
-| Allow-all / Qwen, poisoned invoice | 2 | 2/2 | n/a | 0/2 |
-| Structural / Qwen, poisoned invoice | 2 | 0/2 | n/a | 0/2 |
-
-Static structural mock recorded 195 allows, 45 blocks, 2 escalations, and 2 rewrites. Eight blocked
-actions matched reference-plan patterns; that diagnostic does not prove they were safe. Median/p95
-decision latency was 1.042/2.140 ms, excluding inference. Mock rates do not establish real-LLM robustness.
-
-The real benign probes—enterprise project status, finance dispute notes, SOC intelligence correlation—
-completed with no interventions. Both poisoned-invoice pairs exposed Qwen to the attack and produced
-a credential-bearing response. Structural mode blocked disclosure and allowed a safe final response,
-but Qwen never created the draft. More explicit generic completion feedback in the second pair
-preserved that task failure. Neither pair proves successful end-to-end recovery. Greedy repeated
-trials are not independent samples or a statistical robustness rate.
-
-Historical corrected semantic development: 10/10 valid, 8/10 correct, **1 unsafe allow**, 1 abstention.
-Frozen holdout: 20/20 valid, 17/20 correct, 0 unsafe allows, 3 abstentions. The development safety gate
-failed. An earlier full hybrid run lost nearly all benign utility through monitor failures. Those
-artifacts remain preserved; failed-monitor containment is not a semantic improvement.
+Each run gets a unique timestamped directory containing the result, manifest, and raw traces. The
+tracked [structural mock result record](docs/evaluation-results/structural-mock-v1.md) identifies the
+measured source revision and scenario set. Mock follows published reference plans; its outcomes do not
+establish performance with a live model. For older real-model and semantic-monitor observations, see
+the [historical phase audit](docs/phase-readiness.md), with its evidence limits.
 
 ## Reproducibility and packaging
 
 New manifests record source identity, dirty-file hashes, effective configuration, model/runtime,
 scenario hashes, seeds, UUID execution IDs, and raw artifact checksums. Extracted source archives
 support evaluation without Git. Older manifests keep their original metadata omissions.
+
+Raw run artifacts under `artifacts/`, generated reports under `reports/`, browser captures under
+`.runtime/`, local `competition.yaml` and `.env` files, and model weights are deliberately excluded by
+`.gitignore`. The compact result record is tracked; full traces and manifests are regenerated locally
+with the command above. Historical artifacts may be absent from a fresh checkout.
 
 ```powershell
 $rulesRun = 'artifacts\replace-with-rules-directory'
@@ -149,12 +151,15 @@ workflow; use `bundle` for code-and-evidence packaging.
 
 ## Model and dataset declaration
 
+The model rows describe the configuration used in the historical Qwen probes; the latest result
+record above is a mock run.
+
 | Component | Declaration |
 | --- | --- |
 | Structural defense | Python rules, bounded in-memory state; no learned weights |
-| Agent / optional monitor | Local Alibaba Qwen3-8B via Ollama, Q4_K_M, 8.2B parameters; no fine-tuning |
-| Model digest | `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41` |
-| Agent settings | Temperature 0, thinking off, context 4,096, output limit 768 tokens |
+| Agent / optional monitor in historical probes | Local Alibaba Qwen3-8B via Ollama, Q4_K_M, 8.2B parameters; no fine-tuning |
+| Historical model digest | `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41` |
+| Historical agent settings | Temperature 0, thinking off, context 4,096, output limit 768 tokens |
 | Scenario data | 40 public + 9 validation; 35 attacks, 14 benign, five hard negatives |
 | Additional semantic data | 10 development and 20 frozen holdout cases in `experiments/` |
 | Training data | None for this defense; upstream learned-monitor kit is retained but unused |
@@ -207,9 +212,23 @@ py -3.12 -m uv run --project ..\.. --frozen pytest -q
 Pop-Location
 ```
 
-The latest local check gate and reproducible structural/mock baseline are recorded in
-[docs/development-baseline.md](docs/development-baseline.md). See
-[docs/phase-readiness.md](docs/phase-readiness.md) for the specification audit and remaining scope.
-Our code is in `src/sentinel/firewall/`; the upstream simulator is retained under `src/sentinel/`.
-See [architecture](docs/architecture.md), [threat model](docs/threat-model.md), and
-[repair notes](docs/repair-notes.md). The upstream license is retained in [LICENSE](LICENSE).
+On Windows accounts without symlink-creation privilege, symlink-specific tests report a targeted
+skip; the remaining traversal checks still run.
+
+The [development baseline](docs/development-baseline.md) records an earlier checkpoint; the latest
+mock measurement is in the versioned result record. The [phase audit](docs/phase-readiness.md) is a
+historical evidence snapshot.
+
+## Repository map
+
+| Path | Role |
+| --- | --- |
+| `src/sentinel/firewall/` | Firewall enforcement, local monitor adapter, CLI, dashboard, replay, and bundles |
+| `src/sentinel/{core,agent,tools,domains,evaluator,attackers}/` | Simulator, reference agent, tool domains, and evaluation foundation retained from the pinned starter kit |
+| `starter-kits/` | Standalone participant examples |
+| `tests/` | Unit, integration, and security regressions; starter-kit tests live beside each kit |
+| `docs/` | Architecture, threat model, operations, and versioned evaluation records |
+
+See [UPSTREAM.md](UPSTREAM.md) for the imported revision and [architecture](docs/architecture.md),
+[threat model](docs/threat-model.md), and [repair notes](docs/repair-notes.md) for implementation
+details. The upstream license is retained in [LICENSE](LICENSE).

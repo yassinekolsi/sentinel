@@ -1,6 +1,11 @@
-# Development baseline
+# Historical development baseline
 
 Recorded on 2026-09-23 after introducing the shared `make check` gate.
+
+This checkpoint is tied to source commit `2f0cae2e2127fc689fda5180e574246acfcb1f2a`; its test counts
+and latency are not the current baseline. For the latest tracked-code mock result, see
+[structural-mock-v1](evaluation-results/structural-mock-v1.md). This older record is retained so its
+original environment, source identity, and measurements are not overwritten.
 
 ## Environment and source
 
@@ -64,6 +69,6 @@ remain separate.
 ## CI status
 
 The GitHub Actions workflow runs the same `make check` gate on pushes, pull requests, and manual
-dispatch. Hosted run [35913958694](https://github.com/yassinekolsi/sentiel/actions/runs/35913958694)
+dispatch. Hosted run [35913958694](https://github.com/yassinekolsi/sentinel/actions/runs/35913958694)
 passed on commit `b65f65e` in 40 seconds, including dependency installation and `make check`. GitHub
 reported an informational `ubuntu-latest` migration annotation; it did not fail the run.
