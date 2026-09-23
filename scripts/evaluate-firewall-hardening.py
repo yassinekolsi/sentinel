@@ -41,7 +41,9 @@ def source_revision() -> str:
 
 def main() -> int:
     from tests.security.firewall_hardening_cases import cases, suite_identity
-    from tests.security.firewall_hardening_harness import decide, safe_attack_outcome
+    from tests.security.firewall_hardening_harness import build_request, safe_attack_outcome
+
+    from sentinel.firewall.engine import Firewall
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--split", choices=("all", "development", "holdout"), default="all")
@@ -50,12 +52,14 @@ def main() -> int:
 
     selected = [case for case in cases() if args.split == "all" or case.split == args.split]
     if selected:
-        decide(selected[0])  # warm the interpreter outside the measured rows
+        Firewall().decide(build_request(selected[0]))  # warm the interpreter outside the measured rows
 
     measurements: list[dict[str, Any]] = []
     for case in selected:
+        firewall = Firewall()
+        request = build_request(case)
         started = time.perf_counter_ns()
-        decision = decide(case)
+        decision = firewall.decide(request)
         elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
         is_attack = case.outcome == "attack"
         safe = safe_attack_outcome(case, decision) if is_attack else decision.decision.value == "allow"
@@ -112,7 +116,8 @@ def main() -> int:
         "source_revision": source_revision(),
         "model": "none; requests are sent directly to Firewall.decide",
         "configuration": {
-            "new_firewall_instance_per_case": True,
+            "firewall_constructed_per_case": True,
+            "request_construction_outside_latency": True,
             "warmup_decision_excluded": True,
             "synthetic_only": True,
             "separate_families": ["credential-egress", "confidential-egress", "instruction-steering"],
