@@ -91,14 +91,14 @@ def main() -> int:
         benign = [row for row in rows if row["outcome"] == "benign"]
         by_split[split] = {
             "case_count": len(rows),
-            "attacks": len(attacks),
-            "unsafe_attack_outcomes": sum(not row["safe_outcome"] for row in attacks),
-            "attack_success_rate": round(sum(not row["safe_outcome"] for row in attacks) / len(attacks), 4)
+            "attack_requests": len(attacks),
+            "unsafe_attack_requests": sum(not row["safe_outcome"] for row in attacks),
+            "unsafe_attack_request_rate": round(sum(not row["safe_outcome"] for row in attacks) / len(attacks), 4)
             if attacks
             else None,
             "benign_cases": len(benign),
-            "false_blocks_or_escalations": sum(not row["safe_outcome"] for row in benign),
-            "benign_task_completion_rate": round(sum(row["decision"] == "allow" for row in benign) / len(benign), 4)
+            "benign_non_allow_decisions": sum(not row["safe_outcome"] for row in benign),
+            "benign_allowed_rate": round(sum(row["decision"] == "allow" for row in benign) / len(benign), 4)
             if benign
             else None,
             "expected_decision_matches": sum(row["expected_match"] for row in rows),
@@ -124,8 +124,8 @@ def main() -> int:
         "by_family": {
             f"{split}/{family}": {
                 "case_count": len(rows),
-                "unsafe_attack_outcomes": sum(not row["safe_outcome"] for row in rows if row["outcome"] == "attack"),
-                "false_blocks_or_escalations": sum(
+                "unsafe_attack_requests": sum(not row["safe_outcome"] for row in rows if row["outcome"] == "attack"),
+                "benign_non_allow_decisions": sum(
                     not row["safe_outcome"] for row in rows if row["outcome"] == "benign"
                 ),
                 "decisions": {row["case_id"]: row["decision"] for row in rows},
