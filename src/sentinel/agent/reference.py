@@ -17,6 +17,7 @@ from sentinel.agent.memory import AgentMemory
 from sentinel.config import DefenseRuntimeConfig
 from sentinel.core.actions import ActionType, CandidateAction, Decision, DefenseDecision
 from sentinel.core.events import Actor, EventLog, EventType, LogicalClock
+from sentinel.core.policy_context import PolicyContext
 from sentinel.core.provenance import (
     Provenance,
     SourceType,
@@ -62,7 +63,7 @@ class ReferenceAgent:
         hooks: RunHooks,
         log: EventLog,
         clock: LogicalClock,
-        policy_context: dict[str, object],
+        policy_context: PolicyContext,
         runtime: DefenseRuntimeConfig,
         execution_id: str | None = None,
         include_reference_plan: bool = False,
@@ -141,7 +142,7 @@ class ReferenceAgent:
             if last
             else None,
             candidate_action=action,
-            policy_context=dict(self.policy_context),
+            policy_context=self.policy_context,
             provenance=records,
             history_digest=HistoryDigest(
                 steps_taken=step_id - 1,

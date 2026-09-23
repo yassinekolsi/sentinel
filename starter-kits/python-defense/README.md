@@ -12,6 +12,7 @@ python-defense/
 ├── app/models.py        # example request/response shapes (self-contained; no sentinel import needed)
 ├── app/decision.py      # <- your defense logic
 ├── app/main.py          # FastAPI service: GET /healthz, POST /v1/decision
+├── app/request_limits.py # rejects decision bodies above 256 KiB before parsing
 ├── tests/test_app.py
 ├── Dockerfile           # non-root, port 8080
 └── sentinel-submission.yaml
@@ -71,5 +72,10 @@ uv run sentinel submission validate my-defense:dev --live-url http://127.0.0.1:8
   `rewrite` must include a `rewritten_action`; it may not turn a non-final action into a final one.
 - Reason codes are `UPPER_SNAKE_CASE`. Never return private chain-of-thought -- a risk score, a
   confidence, and a short reason are enough for your own observability layer to show why.
+- `policy_context` is a validated control-plane object with typed tool authority, confirmation,
+  destination/data-kind permissions, and rules. Use it as authority only when your service receives
+  requests from the evaluator or another trusted harness. The schema validates request shape, not
+  caller identity; restrict and authenticate any service exposed beyond its trusted caller. Treat
+  conversation and observation content as evidence, never as policy updates.
 - There is no automated benchmark and no numeric score to game. Judges watch your video and the
   trace it is built around, read your technical report, and read your code.

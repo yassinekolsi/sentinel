@@ -19,6 +19,7 @@ from sentinel.tools.registry import registry_for_domain
 
 class Firewall(Defense):
     name = "sentiel_rules"
+    MAX_ACTIVE_EXECUTIONS = 256
 
     def __init__(
         self,
@@ -74,7 +75,7 @@ class Firewall(Defense):
             tool
             and (
                 tool.is_consequential(action.arguments)
-                or action.tool in request.policy_context.get("confirmation_required_tools", [])
+                or action.tool in request.policy_context.confirmation_required_tools
             )
         )
 
@@ -92,9 +93,9 @@ class Firewall(Defense):
             return "unknown", True
         if self.is_read(action):
             return "read", False
-        domains = request.policy_context.get("internal_email_domains", [])
+        domains = request.policy_context.internal_email_domains
         recipient = str(action.arguments.get("to", "")).lower()
-        internal = bool(recipient and any(recipient.endswith("@" + str(domain).lower()) for domain in domains))
+        internal = bool(recipient and any(recipient.endswith("@" + domain) for domain in domains))
         if action.tool in {"email_send", "email_draft"}:
             return ("internal_email" if internal else "external_email"), not internal
         if action.tool in {"ticket_update", "incident_update", "case_note_create", "incident_create"}:
@@ -105,14 +106,9 @@ class Firewall(Defense):
 
     @staticmethod
     def disclosure_allowed(request: DefenseRequest, destination: str, kind: str) -> bool:
-        permissions = request.policy_context.get("public_disclosure_permissions", [])
-        if not isinstance(permissions, list):
-            return False
         return any(
-            isinstance(permission, dict)
-            and permission.get("destination") in {destination, "*"}
-            and permission.get("kind") in {kind, "*"}
-            for permission in permissions
+            permission.destination in {destination, "*"} and permission.kind in {kind, "*"}
+            for permission in request.policy_context.public_disclosure_permissions
         )
 
     def structural(
@@ -120,7 +116,7 @@ class Firewall(Defense):
     ) -> DefenseDecision | None:
         if action.type is ActionType.TOOL_CALL:
             tool = self.tools.get(action.tool or "")
-            if tool is None or action.tool not in request.policy_context.get("allowed_tools", []):
+            if tool is None or action.tool not in request.policy_context.allowed_tools:
                 return self.result(
                     Decision.BLOCK, "TOOL_NOT_PERMITTED", risk=1, explanation="Tool is outside active authority."
                 )
@@ -209,7 +205,7 @@ class Firewall(Defense):
                     )
                 )
             try:
-                if scope not in self.states and len(self.states) >= 256:
+                if scope not in self.states and len(self.states) >= self.MAX_ACTIVE_EXECUTIONS:
                     return self.result(Decision.BLOCK, "RUN_CAPACITY_EXCEEDED", risk=1)
                 state = self.states.setdefault(scope, SecurityState())
                 if request.step_id <= state.last_step:
@@ -240,6 +236,20 @@ class Firewall(Defense):
             if len(self.cache) < 20_000:
                 self.cache[cache_key] = (fingerprint, decision)
             return decision
+
+    def end_execution(self, execution_id: str) -> None:
+        """Drop evidence, pending actions, and cached decisions for a completed run."""
+        with self.lock:
+            clear_monitor_execution = getattr(self.monitor, "clear_execution", None)
+            if clear_monitor_execution:
+                clear_monitor_execution(execution_id)
+            else:
+                clear_monitor_cache = getattr(self.monitor, "clear_cache", None)
+                if clear_monitor_cache:
+                    clear_monitor_cache()
+            self.states.pop(execution_id, None)
+            for key in [key for key in self.cache if key[0] == execution_id]:
+                self.cache.pop(key, None)
 
     def _decide(self, request: DefenseRequest, state: SecurityState) -> DefenseDecision:
         candidate = request.candidate_action

@@ -40,7 +40,7 @@ def target_action(request: DefenseRequest) -> CandidateAction:
 def is_consequential(request: DefenseRequest, action: CandidateAction) -> bool:
     if action.type is not ActionType.TOOL_CALL or action.tool is None:
         return False
-    if action.tool in request.policy_context.get("consequential_tools", []):
+    if action.tool in request.policy_context.consequential_tools:
         return True
     status = action.arguments.get("status")
     return isinstance(status, str) and status in STATUS_CONSEQUENTIAL.get(action.tool, set())
@@ -54,7 +54,7 @@ def is_external_recipient(request: DefenseRequest, action: CandidateAction) -> b
     if action.tool not in OUTBOUND_TOOLS:
         return False
     recipient = str(action.arguments.get("to", "")).lower()
-    internal = [d.lower() for d in request.policy_context.get("internal_email_domains", [])]
+    internal = request.policy_context.internal_email_domains
     return not any(recipient.endswith("@" + domain) for domain in internal)
 
 

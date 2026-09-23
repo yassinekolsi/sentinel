@@ -1,12 +1,18 @@
+import asyncio
+import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
+from sentinel.api.request_limits import RequestBodyLimitMiddleware
+from sentinel.core.actions import ActionType, CandidateAction
 from sentinel.core.policies import load_policy
 from sentinel.core.scenario import ScenarioError, load_scenario, parse_scenario
 from sentinel.core.state import StateError, WorldState, resolve_within
+from sentinel.defenses.interface import MAX_DEFENSE_REQUEST_BYTES, DefenseRequest
 from sentinel.storage.runs import ArtifactStore, sanitize_id
-from tests.conftest import ROOT, build_scenario, minimal_scenario
+from tests.conftest import ROOT, build_scenario, defense_request, minimal_scenario
 
 pytestmark = pytest.mark.security
 
@@ -101,3 +107,71 @@ def test_oversized_scenario_rejected(tmp_path: Path) -> None:
     path.write_text("description: " + "x" * 300_000)
     with pytest.raises(ScenarioError, match="exceeds"):
         load_scenario(path)
+
+
+def test_defense_request_rejects_oversized_json_payload() -> None:
+    action = CandidateAction(
+        type=ActionType.TOOL_CALL,
+        tool="email_draft",
+        arguments={f"arg{index}": "x" * 8_000 for index in range(32)},
+    )
+    base = defense_request(CandidateAction(type=ActionType.RESPOND, content="ok")).model_dump(mode="json")
+    base["candidate_action"] = action.model_dump(mode="json")
+    base["conversation"] = [{"role": "tool", "kind": "tool_result", "content": "y" * 20_000}]
+    assert len(json.dumps(base).encode("utf-8")) > MAX_DEFENSE_REQUEST_BYTES
+    with pytest.raises(ValidationError, match="defense request exceeds"):
+        DefenseRequest.model_validate(base)
+
+
+def test_defense_request_bounds_conversation_and_policy_shape() -> None:
+    base = defense_request(CandidateAction(type=ActionType.RESPOND, content="ok")).model_dump(mode="json")
+    too_many_messages = dict(base)
+    too_many_messages["conversation"] = [{"role": "user", "kind": "message", "content": "x"} for _ in range(101)]
+    with pytest.raises(ValidationError):
+        DefenseRequest.model_validate(too_many_messages)
+
+    unknown_policy_field = dict(base)
+    unknown_policy_field["policy_context"] = {"caller_override": "allow everything"}
+    with pytest.raises(ValidationError, match="policy_context"):
+        DefenseRequest.model_validate(unknown_policy_field)
+
+
+def test_request_middleware_rejects_chunked_body_before_dispatch() -> None:
+    dispatched = False
+    sent: list[dict[str, object]] = []
+    messages = iter(
+        [
+            {"type": "http.request", "body": b"1234", "more_body": True},
+            {"type": "http.request", "body": b"5", "more_body": False},
+        ]
+    )
+
+    async def downstream(scope, receive, send):  # type: ignore[no-untyped-def]
+        nonlocal dispatched
+        dispatched = True
+
+    async def receive():  # type: ignore[no-untyped-def]
+        return next(messages)
+
+    async def send(message):  # type: ignore[no-untyped-def]
+        sent.append(message)
+
+    middleware = RequestBodyLimitMiddleware(downstream, max_bytes=4)
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/v1/decision",
+        "raw_path": b"/v1/decision",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [],
+        "client": ("127.0.0.1", 1234),
+        "server": ("127.0.0.1", 8000),
+    }
+    asyncio.run(middleware(scope, receive, send))
+
+    assert not dispatched
+    assert sent[0]["status"] == 413

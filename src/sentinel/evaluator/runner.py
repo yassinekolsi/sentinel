@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -22,6 +23,7 @@ from sentinel.config import BENCHMARK_VERSION, CompetitionConfig
 from sentinel.core.actions import ActionType, CandidateAction, DefenseDecision
 from sentinel.core.events import Actor, Event, EventLog, EventType, LogicalClock
 from sentinel.core.policies import Finding, PolicyEngine, load_policy
+from sentinel.core.policy_context import PolicyContext
 from sentinel.core.result import (
     AttackMutationRecord,
     DecisionRecord,
@@ -43,6 +45,8 @@ from sentinel.storage.runs import ArtifactStore, sanitize_id
 from sentinel.tools.base import Sink, Tool
 from sentinel.tools.gateway import GatewayResult, ToolGateway
 from sentinel.tools.registry import ToolRegistry, registry_for_domain
+
+logger = logging.getLogger(__name__)
 
 
 class AttackMode(StrEnum):
@@ -288,10 +292,9 @@ def run_scenario(
         scenario, state, log, policy, attacker, config.attack_mode, competition.attack_simulation.query_budget
     )
     hooks.bind_registry(gateway)
-    policy_context: dict[str, Any] = policy.defense_context(registry.as_dict())
     internal_domain = state.settings.get("internal_email_domain")
-    if internal_domain:
-        policy_context["internal_email_domains"] = [internal_domain]
+    internal_domains = [internal_domain] if isinstance(internal_domain, str) and internal_domain else []
+    policy_context: PolicyContext = policy.defense_context(registry.as_dict(), internal_email_domains=internal_domains)
     agent = ReferenceAgent(
         scenario=scenario,
         state=state,
@@ -306,7 +309,13 @@ def run_scenario(
         execution_id=execution_id,
         include_reference_plan=config.include_reference_plan,
     )
-    agent_result = agent.run()
+    try:
+        agent_result = agent.run()
+    finally:
+        try:
+            defense.end_execution(execution_id)
+        except Exception:
+            logger.exception("Defense execution cleanup failed; the service must retain its capacity guard")
 
     graders = grade_task(
         list(scenario.success_conditions), GradingContext(state=state, responses=agent_result.responses)

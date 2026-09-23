@@ -30,7 +30,7 @@ class HeuristicRiskDefense(Defense):
         action = target_action(request)
         risk = 0.05
         codes: list[str] = []
-        allowed = request.policy_context.get("allowed_tools", [])
+        allowed = request.policy_context.allowed_tools
         if action.type is ActionType.TOOL_CALL:
             if action.tool not in allowed:
                 risk += 0.5

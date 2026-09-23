@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -21,6 +21,109 @@ REASON_CODE_PATTERN = r"^[A-Z][A-Z0-9_]{1,63}$"
 
 class _Lenient(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
+
+_ToolName = Annotated[str, Field(min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_]{1,63}$")]
+_Domain = Annotated[
+    str,
+    Field(
+        min_length=1,
+        max_length=253,
+        pattern=r"^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+        r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$",
+    ),
+]
+
+
+class _PolicyRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str = Field(pattern=r"^[A-Z][A-Z0-9_]{2,63}$")
+    severity: Literal["low", "medium", "high", "critical"]
+    description: str = Field(default="", max_length=500)
+
+
+class ToolPermissionRule(_PolicyRule):
+    kind: Literal["tool_permission"]
+    consequential_severity: Literal["low", "medium", "high", "critical"] = "critical"
+
+
+class ConfirmationRule(_PolicyRule):
+    kind: Literal["requires_confirmation"]
+    tools: tuple[_ToolName, ...] | Literal["consequential"] = "consequential"
+
+
+class DataFlowRule(_PolicyRule):
+    kind: Literal["data_flow"]
+    min_sensitivity: Literal["public", "internal", "confidential", "restricted"] = "confidential"
+    lower_severity: Literal["low", "medium", "high", "critical"] = "medium"
+
+
+class ForbiddenEffectRule(_PolicyRule):
+    kind: Literal["forbidden_effect"]
+
+
+class PrerequisiteRule(_PolicyRule):
+    kind: Literal["prerequisite"]
+    tool: _ToolName
+    requires: tuple[_ToolName, ...] = Field(min_length=1, max_length=64)
+
+
+PolicyRule = Annotated[
+    ToolPermissionRule | ConfirmationRule | DataFlowRule | ForbiddenEffectRule | PrerequisiteRule,
+    Field(discriminator="kind"),
+]
+
+
+class DisclosurePermission(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    destination: Literal[
+        "external_email",
+        "internal_email",
+        "user_response",
+        "memory",
+        "internal_note",
+        "unknown_write",
+        "read",
+        "unknown",
+        "*",
+    ]
+    kind: Literal["confidential", "credential", "*"]
+
+
+class PolicyContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    policy_id: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    policy_version: int | None = Field(default=None, ge=1)
+    allowed_tools: tuple[_ToolName, ...] = Field(default_factory=tuple, max_length=128)
+    confirmation_required_tools: tuple[_ToolName, ...] = Field(default_factory=tuple, max_length=128)
+    consequential_tools: tuple[_ToolName, ...] = Field(default_factory=tuple, max_length=128)
+    internal_email_domains: tuple[_Domain, ...] = Field(default_factory=tuple, max_length=128)
+    public_disclosure_permissions: tuple[DisclosurePermission, ...] = Field(default_factory=tuple, max_length=64)
+    rules: tuple[PolicyRule, ...] = Field(default_factory=tuple, max_length=128)
+
+    @field_validator("internal_email_domains")
+    @classmethod
+    def _normalize_domains(cls, domains: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(domain.lower() for domain in domains)
+
+    @model_validator(mode="after")
+    def _unique_entries(self) -> PolicyContext:
+        for field_name in (
+            "allowed_tools",
+            "confirmation_required_tools",
+            "consequential_tools",
+            "internal_email_domains",
+        ):
+            values = getattr(self, field_name)
+            if len(values) != len(set(values)):
+                raise ValueError(f"{field_name} contains duplicates")
+        permission_pairs = [(item.destination, item.kind) for item in self.public_disclosure_permissions]
+        if len(permission_pairs) != len(set(permission_pairs)):
+            raise ValueError("public_disclosure_permissions contains duplicates")
+        rule_ids = [rule.id for rule in self.rules]
+        if len(rule_ids) != len(set(rule_ids)):
+            raise ValueError("rules contains duplicate ids")
+        return self
 
 
 class CandidateAction(BaseModel):
@@ -85,7 +188,7 @@ class DefenseRequest(_Lenient):
     conversation: list[ConversationItem] = Field(default_factory=list)
     observation: ObservationView | None = None
     candidate_action: CandidateAction
-    policy_context: dict[str, Any] = Field(default_factory=dict)
+    policy_context: PolicyContext = Field(default_factory=PolicyContext)
     provenance: list[ProvenanceRecord] = Field(default_factory=list)
     history_digest: HistoryDigest = Field(default_factory=HistoryDigest)
 

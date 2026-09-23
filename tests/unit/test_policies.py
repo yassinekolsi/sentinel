@@ -1,4 +1,8 @@
+import pytest
+from pydantic import ValidationError
+
 from sentinel.core.policies import Leak, PolicyEngine, Severity, load_policy
+from sentinel.core.policy_context import DisclosurePermission, PolicyContext
 from sentinel.core.provenance import Sensitivity, TrustLevel
 from sentinel.core.scenario import SecurityProperty
 from sentinel.core.state import Effect
@@ -57,17 +61,45 @@ def test_forbidden_effects_and_leaks() -> None:
 def test_defense_context_contains_no_ground_truth() -> None:
     eng = engine("finance_false_approval")
     context = eng.defense_context(registry_for_domain("finance").as_dict())
-    assert set(context) == {
-        "policy_id",
-        "policy_version",
-        "allowed_tools",
-        "confirmation_required_tools",
-        "consequential_tools",
-        "rules",
-    }
-    assert "payment_confirm" in context["consequential_tools"]
+    assert context.policy_id == "finance_standard"
+    assert context.policy_version == 1
+    assert "payment_confirm" in context.consequential_tools
+    assert context.rules
     scenario = load("finance_false_approval")
-    text = str(context)
+    text = context.model_dump_json()
     for payload in scenario.attack.payloads:
         assert payload.text not in text
     assert "APR-2231" not in text and scenario.turns[0].reference_plan[-1].content not in text
+
+
+def test_defense_context_carries_only_configured_disclosure_permissions() -> None:
+    eng = engine("finance_false_approval")
+    assert eng.defense_context(registry_for_domain("finance").as_dict()).public_disclosure_permissions == ()
+
+    permission = DisclosurePermission(destination="external_email", kind="confidential")
+    configured_policy = eng.policy.model_copy(update={"public_disclosure_permissions": [permission]})
+    configured_engine = PolicyEngine(configured_policy, eng.scenario)
+    context = configured_engine.defense_context(
+        registry_for_domain("finance").as_dict(), internal_email_domains=["ATLAS.EXAMPLE"]
+    )
+    assert context.public_disclosure_permissions == (permission,)
+    assert context.internal_email_domains == ("atlas.example",)
+
+
+def test_policy_context_validates_authority_and_disclosure_fields() -> None:
+    context = PolicyContext(
+        allowed_tools=["email_draft"],
+        internal_email_domains=["ATLAS.EXAMPLE"],
+        public_disclosure_permissions=[DisclosurePermission(destination="external_email", kind="confidential")],
+    )
+    assert context.internal_email_domains == ("atlas.example",)
+    assert context.allowed_tools == ("email_draft",)
+
+    with pytest.raises(ValidationError, match="caller_override"):
+        PolicyContext.model_validate({"allowed_tools": ["email_draft"], "caller_override": True})
+    with pytest.raises(ValidationError, match="destination"):
+        PolicyContext.model_validate(
+            {"public_disclosure_permissions": [{"destination": "anywhere", "kind": "confidential"}]}
+        )
+    with pytest.raises(ValidationError, match="duplicates"):
+        PolicyContext.model_validate({"allowed_tools": ["email_draft", "email_draft"]})

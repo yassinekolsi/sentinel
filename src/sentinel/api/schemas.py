@@ -11,6 +11,7 @@ from sentinel.attackers.interface import (
     TranscriptItem,
 )
 from sentinel.core.actions import ActionType, CandidateAction, Decision, DefenseDecision
+from sentinel.core.policy_context import DisclosurePermission, PolicyContext
 from sentinel.core.provenance import Provenance, Sensitivity, SourceType, TrustLevel
 from sentinel.defenses.interface import (
     ConversationItem,
@@ -34,8 +35,10 @@ __all__ = [
     "Decision",
     "DefenseDecision",
     "DefenseRequest",
+    "DisclosurePermission",
     "HistoryDigest",
     "ObservationView",
+    "PolicyContext",
     "Provenance",
     "ProvenanceRecord",
     "SeedPayload",
