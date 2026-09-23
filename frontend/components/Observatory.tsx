@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, ArrowLeft, ArrowRight, Check, ChevronDown, Layers3, Pause, Play, Search, ShieldAlert } from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, Check, ChevronDown, Layers3, Pause, Play, ShieldAlert } from "lucide-react";
 import runIndex from "@/data/index.json";
 import WorkflowPath from "./WorkflowPath";
 
@@ -36,8 +36,6 @@ export default function Observatory() {
   const [trace, setTrace] = useState<Trace | null>(null);
   const [loadError, setLoadError] = useState("");
   const [caseId, setCaseId] = useState("");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [tab, setTab] = useState<"overview" | "events">("overview");
@@ -53,8 +51,6 @@ export default function Observatory() {
         setCaseId(data.metadata.outcomes.find((item) => item.scenario_id === "enterprise_poisoned_invoice")?.run_id ?? data.metadata.outcomes[0]?.run_id ?? data.events[0]?.run_id ?? "");
         const focusRun = data.metadata.outcomes.find((item) => item.scenario_id === "enterprise_poisoned_invoice")?.run_id ?? data.metadata.outcomes[0]?.run_id;
         setSelected(data.events.find((event) => event.run_id === focusRun && event.type === "defense_decision" && event.payload.decision === "block")?.step_id ?? null);
-        setFilter("all");
-        setQuery("");
         setLoadError("");
       })
       .catch((error: unknown) => { if (!cancelled) setLoadError(error instanceof Error ? error.message : "Trace unavailable"); });
@@ -73,10 +69,7 @@ export default function Observatory() {
       outcome: records.filter((event) => ["tool_result", "retrieval_result", "model_output", "human_confirmation", "memory_write", "safety_feedback"].includes(event.type)),
     })).sort((a, b) => a.id - b.id);
   }, [events]);
-  const visible = useMemo(() => steps.filter((step) => {
-    const decision = String(step.decision?.payload.decision ?? "");
-    return (filter === "all" || decision === filter) && (!query || pretty(step.events).toLowerCase().includes(query.toLowerCase()));
-  }), [steps, filter, query]);
+  const visible = steps;
   const current = visible.find((step) => step.id === selected) ?? visible[0];
   const currentIndex = visible.findIndex((step) => step.id === current?.id);
   const counts = useMemo(() => Object.fromEntries(decisions.map((name) => [name, name === "all" ? steps.filter((step) => step.decision).length : steps.filter((step) => step.decision?.payload.decision === name).length])), [steps]);
@@ -125,7 +118,7 @@ export default function Observatory() {
     <div className="main-column">
       <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMenu(!menu)} aria-label="Toggle run navigation"><Layers3 size={20} /></button><span>Observatory</span><span className="crumb">/</span><strong>{activeRun.title}</strong></div></header>
       <main className="page">
-        <div className="page-title"><h1>{activeRun.title}</h1><div className="top-actions"><button className="outline-button" onClick={() => { setSelected(null); setFilter("all"); setQuery(""); }}>Reset view</button></div></div>
+        <div className="page-title"><h1>{activeRun.title}</h1><div className="top-actions"><button className="outline-button" onClick={() => setSelected(null)}>Reset view</button></div></div>
         {loadError && <div className="error-box">{loadError}</div>}
         <section className="metrics">
           <SummaryValue label="DECISIONS" value={String(counts.all ?? 0)} />
@@ -136,11 +129,11 @@ export default function Observatory() {
         <section className="workspace-card">
           <div className="case-bar"><div className="case-select-wrap"><span>CASE</span><select aria-label="Case" value={caseId} onChange={(event) => { setCaseId(event.target.value); setSelected(null); setPlaying(false); }}>{trace?.metadata.outcomes.map((item) => <option key={item.run_id} value={item.run_id}>{caseName(item.scenario_id)}</option>)}</select><ChevronDown size={16} /></div><div className="case-tags"><span className={outcome?.task_success ? "tag good" : "tag bad"}>TASK {outcome ? outcome.task_success ? "COMPLETE" : "INCOMPLETE" : "PENDING"}</span><span className={outcome?.attack_present ? outcome.attack_success ? "tag bad" : "tag good" : "tag neutral"}>{outcome?.attack_present ? outcome.attack_success ? "ATTACK SUCCEEDED" : "ATTACK PREVENTED" : "BENIGN TASK"}</span></div></div>
           <div className="goal-row"><span className="section-number">01</span><div><label>USER GOAL</label><p>{goal || "No user goal recorded"}</p></div></div>
-          <WorkflowPath steps={steps} selected={current?.id} onSelect={(id) => { setSelected(id); setPlaying(false); setTab("overview"); }} />
+          <WorkflowPath key={caseId} steps={steps} selected={current?.id} outcome={outcome} onSelect={(id) => { setSelected(id); setPlaying(false); setTab("overview"); }} />
           <div className="workspace-tabs"><button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Decision path</button><button className={tab === "events" ? "on" : ""} onClick={() => setTab("events")}>Full event stream <span>{events.length}</span></button></div>
           {tab === "overview" ? <>
-            <div className="trace-toolbar"><div className="search-wrap"><Search size={17} /><input type="search" aria-label="Search trace" placeholder="Search tools, reasons, source text" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="filter-tabs">{decisions.map((name) => <button key={name} className={filter === name ? "on" : ""} onClick={() => { setFilter(name); setSelected(null); setPlaying(false); }}>{name === "all" ? "All" : name} <span>{counts[name]}</span></button>)}</div><div className="step-actions"><button aria-label="Previous step" disabled={currentIndex <= 0} onClick={() => move(-1)}><ArrowLeft size={16} /></button><button aria-label={playing ? "Pause replay" : "Play replay"} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={16} /> : <Play size={16} />}</button><button aria-label="Next step" disabled={currentIndex < 0 || currentIndex >= visible.length - 1} onClick={() => move(1)}><ArrowRight size={16} /></button></div></div>
-            <div className="trace-body"><nav className="step-list" aria-label="Action timeline">{visible.map((step) => <button key={step.id} onClick={() => { setSelected(step.id); setPlaying(false); }} className={`step-row ${current?.id === step.id ? "selected" : ""}`}><span className="step-index">{String(step.id).padStart(2, "0")}</span><span className="step-text"><strong>{stage(step)}</strong></span>{step.decision && <span className={`decision-dot ${String(step.decision.payload.decision)}`} title={upper(step.decision.payload.decision)} />}</button>)}{!visible.length && <div className="list-empty">No matching steps</div>}</nav>
+            <div className="trace-toolbar"><div className="step-actions"><button aria-label="Previous step" disabled={currentIndex <= 0} onClick={() => move(-1)}><ArrowLeft size={16} /></button><button aria-label={playing ? "Pause replay" : "Play replay"} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={16} /> : <Play size={16} />}</button><button aria-label="Next step" disabled={currentIndex < 0 || currentIndex >= visible.length - 1} onClick={() => move(1)}><ArrowRight size={16} /></button></div></div>
+            <div className="trace-body">
               <div className="inspector">{current ? <><div className="inspector-head"><div><span className="overline">STEP {String(current.id).padStart(2, "0")}</span><h2>{stage(current)}</h2></div>{decisionName && <span className={`decision-badge ${decisionName}`}>{upper(decisionName)}</span>}</div>
                 {current.decision ? <>{blockedDataFlow && <div className="boundary-path"><div><span>UNTRUSTED INPUT</span><strong>{String(untrustedSource?.provenance.source_id ?? "External source")}</strong></div><b>→</b><div><span>PROTECTED DATA</span><strong>{String(protectedSource?.provenance.source_id ?? "Restricted value")}</strong></div><b>→</b><div><span>OUTPUT BOUNDARY</span><strong>Blocked before delivery</strong></div></div>}<div className="flow-grid"><DataPanel title="CANDIDATE ACTION" value={decision?.action ?? {}} /><section className={`decision-panel ${decisionName}`}><div className="data-panel-head">FIREWALL DECISION</div><div className="decision-main">{upper(decisionName)}</div><div className="reason-list">{(decision?.reason_codes as string[] ?? []).map((reason) => <span key={reason}>{reason}</span>)}</div><div className="decision-stats"><div><span>RISK</span><strong>{String(decision?.risk_score ?? "-")}</strong></div><div><span>CONFIDENCE</span><strong>{String(decision?.confidence ?? "-")}</strong></div></div>{Boolean(decision?.explanation) && <p>{String(decision?.explanation)}</p>}</section><DataPanel title="WHAT HAPPENED" value={current.outcome.length ? current.outcome.map((event) => ({ event: event.type, ...event.payload })) : decisionName === "block" ? "Action stopped. No tool result in this step." : "No execution result recorded in this step."} /></div>
                   {Boolean(decision?.rewritten_action) && <DataPanel title="REPLACEMENT ACTION" value={decision?.rewritten_action} accent="replacement" />}
