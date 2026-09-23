@@ -18,7 +18,7 @@ function eventSummary(event: Event | undefined): string {
 
 export default function WorkflowPath({ steps, selected, onSelect }: { steps: Step[]; selected?: number; onSelect: (id: number) => void }) {
   return <section className="workflow-section" aria-label="Recorded workflow">
-    <div className="workflow-heading"><div><span className="overline">RECORDED WORKFLOW</span><h2>Follow the action</h2></div><span>Click a step to inspect its evidence</span></div>
+    <div className="workflow-heading"><h2>Workflow</h2><span>Click a step to inspect its evidence</span></div>
     <div className="workflow-lanes" aria-hidden="true"><span>AGENT</span><span>FIREWALL</span><span>RESULT</span></div>
     <div className="workflow-scroll"><div className="workflow-graph">
       {steps.map((step, index) => {

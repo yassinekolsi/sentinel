@@ -79,7 +79,7 @@ SENTINEL's redacted, measured traces. From PowerShell at the repository root:
 
 The script exports the current redacted traces, builds Next.js, and starts it on loopback. It shows
 ten recorded run groups, a clickable workflow, case selection, decision filters, search, source trust, the candidate action,
-the intervention, and what actually happened. Every page is marked as a recorded replay. A blocked
+the intervention, and what actually happened. A blocked
 attack with an incomplete user task stays labeled incomplete. All inputs are synthetic.
 
 ## Legacy single-trace browser export

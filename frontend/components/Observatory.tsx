@@ -108,28 +108,24 @@ export default function Observatory() {
   const untrustedSource = sources.find((record) => record.provenance.trust_level === "untrusted_external");
   const protectedSource = sources.find((record) => record.provenance.sensitivity === "restricted");
   const blockedDataFlow = decisionName === "block" && (decision?.reason_codes as string[] | undefined)?.includes("SENSITIVE_DATA_FLOW");
-  const exposure = outcome && trace?.metadata.exposure[outcome.scenario_id];
-  const modelIsMock = activeRun.model === "mock";
 
   return <div className="app-shell">
     <aside className={`sidebar ${menu ? "sidebar-open" : ""}`}>
       <div className="brand"><div className="brand-mark"><img src="/sentinel-shield.svg" alt="Sentinel shield" /></div><div><b>sentinel</b><span>action firewall</span></div></div>
-      <div className="nav-heading">WORKSPACE</div>
       <div className="nav-link active"><Activity size={17} /> Traces <span className="nav-count">{runIndex.length}</span></div>
-      <div className="nav-heading run-heading">RECORDED RUNS</div>
+      <div className="nav-heading run-heading">RUNS</div>
       <div className="run-list">
         {runIndex.map((item: Run) => <button key={item.id} className={`run-link ${runId === item.id ? "chosen" : ""}`} onClick={() => { setRunId(item.id); setMenu(false); setPlaying(false); }}>
           <span className={`run-icon ${item.attacks > 0 ? "attack" : ""}`}>{item.attacks > 0 ? <ShieldAlert size={15} /> : <Check size={15} />}</span>
-          <span className="run-text"><b>{item.title}</b><small>{item.model === "mock" ? "Mock / reference plan" : "Qwen3-8B"} / {item.runs} {item.runs === 1 ? "case" : "cases"}</small></span>
+          <span className="run-text"><b>{item.title}</b></span>
         </button>)}
       </div>
-      <div className="sidebar-foot"><span className="status-dot" /> Local evidence <span>/</span> Synthetic</div>
     </aside>
 
     <div className="main-column">
-      <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMenu(!menu)} aria-label="Toggle run navigation"><Layers3 size={20} /></button><span>Observatory</span><span className="crumb">/</span><strong>{activeRun.title}</strong></div><div className="topbar-right"><span className="recorded-pill"><span /> RECORDED REPLAY</span><span className="model-pill">{modelIsMock ? "MOCK AGENT" : "REAL QWEN3-8B"}</span></div></header>
+      <header className="topbar"><div className="topbar-left"><button className="menu-button" onClick={() => setMenu(!menu)} aria-label="Toggle run navigation"><Layers3 size={20} /></button><span>Observatory</span><span className="crumb">/</span><strong>{activeRun.title}</strong></div></header>
       <main className="page">
-        <div className="page-title"><div><span className="overline">TRACE ANALYSIS</span><h1>{activeRun.title}</h1><p>{modelIsMock ? "Reference plan evaluation" : "Local Qwen3-8B evaluation"} <span className="dot-sep">/</span> {upper(activeRun.mode)} <span className="dot-sep">/</span> {activeRun.attackMode === "adaptive" ? "SCHEDULED ADAPTIVE" : "STATIC"}</p></div><div className="top-actions"><button className="outline-button" onClick={() => { setSelected(null); setFilter("all"); setQuery(""); }}>Reset view</button></div></div>
+        <div className="page-title"><h1>{activeRun.title}</h1><div className="top-actions"><button className="outline-button" onClick={() => { setSelected(null); setFilter("all"); setQuery(""); }}>Reset view</button></div></div>
         {loadError && <div className="error-box">{loadError}</div>}
         <section className="metrics">
           <SummaryValue label="DECISIONS" value={String(counts.all ?? 0)} />
@@ -144,7 +140,7 @@ export default function Observatory() {
           <div className="workspace-tabs"><button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>Decision path</button><button className={tab === "events" ? "on" : ""} onClick={() => setTab("events")}>Full event stream <span>{events.length}</span></button></div>
           {tab === "overview" ? <>
             <div className="trace-toolbar"><div className="search-wrap"><Search size={17} /><input type="search" aria-label="Search trace" placeholder="Search tools, reasons, source text" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="filter-tabs">{decisions.map((name) => <button key={name} className={filter === name ? "on" : ""} onClick={() => { setFilter(name); setSelected(null); setPlaying(false); }}>{name === "all" ? "All" : name} <span>{counts[name]}</span></button>)}</div><div className="step-actions"><button aria-label="Previous step" disabled={currentIndex <= 0} onClick={() => move(-1)}><ArrowLeft size={16} /></button><button aria-label={playing ? "Pause replay" : "Play replay"} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={16} /> : <Play size={16} />}</button><button aria-label="Next step" disabled={currentIndex < 0 || currentIndex >= visible.length - 1} onClick={() => move(1)}><ArrowRight size={16} /></button></div></div>
-            <div className="trace-body"><nav className="step-list" aria-label="Action timeline">{visible.map((step) => <button key={step.id} onClick={() => { setSelected(step.id); setPlaying(false); }} className={`step-row ${current?.id === step.id ? "selected" : ""}`}><span className="step-index">{String(step.id).padStart(2, "0")}</span><span className="step-text"><strong>{stage(step)}</strong><small>{step.events.length} events / {step.decision ? "agent action" : "context"}</small></span>{step.decision && <span className={`decision-dot ${String(step.decision.payload.decision)}`} title={upper(step.decision.payload.decision)} />}</button>)}{!visible.length && <div className="list-empty">No matching steps</div>}</nav>
+            <div className="trace-body"><nav className="step-list" aria-label="Action timeline">{visible.map((step) => <button key={step.id} onClick={() => { setSelected(step.id); setPlaying(false); }} className={`step-row ${current?.id === step.id ? "selected" : ""}`}><span className="step-index">{String(step.id).padStart(2, "0")}</span><span className="step-text"><strong>{stage(step)}</strong></span>{step.decision && <span className={`decision-dot ${String(step.decision.payload.decision)}`} title={upper(step.decision.payload.decision)} />}</button>)}{!visible.length && <div className="list-empty">No matching steps</div>}</nav>
               <div className="inspector">{current ? <><div className="inspector-head"><div><span className="overline">STEP {String(current.id).padStart(2, "0")}</span><h2>{stage(current)}</h2></div>{decisionName && <span className={`decision-badge ${decisionName}`}>{upper(decisionName)}</span>}</div>
                 {current.decision ? <>{blockedDataFlow && <div className="boundary-path"><div><span>UNTRUSTED INPUT</span><strong>{String(untrustedSource?.provenance.source_id ?? "External source")}</strong></div><b>→</b><div><span>PROTECTED DATA</span><strong>{String(protectedSource?.provenance.source_id ?? "Restricted value")}</strong></div><b>→</b><div><span>OUTPUT BOUNDARY</span><strong>Blocked before delivery</strong></div></div>}<div className="flow-grid"><DataPanel title="CANDIDATE ACTION" value={decision?.action ?? {}} /><section className={`decision-panel ${decisionName}`}><div className="data-panel-head">FIREWALL DECISION</div><div className="decision-main">{upper(decisionName)}</div><div className="reason-list">{(decision?.reason_codes as string[] ?? []).map((reason) => <span key={reason}>{reason}</span>)}</div><div className="decision-stats"><div><span>RISK</span><strong>{String(decision?.risk_score ?? "-")}</strong></div><div><span>CONFIDENCE</span><strong>{String(decision?.confidence ?? "-")}</strong></div></div>{Boolean(decision?.explanation) && <p>{String(decision?.explanation)}</p>}</section><DataPanel title="WHAT HAPPENED" value={current.outcome.length ? current.outcome.map((event) => ({ event: event.type, ...event.payload })) : decisionName === "block" ? "Action stopped. No tool result in this step." : "No execution result recorded in this step."} /></div>
                   {Boolean(decision?.rewritten_action) && <DataPanel title="REPLACEMENT ACTION" value={decision?.rewritten_action} accent="replacement" />}
@@ -153,8 +149,7 @@ export default function Observatory() {
               </> : <div className="inspector-empty">Select a step</div>}</div></div>
           </> : <div className="event-stream">{events.map((event) => <details key={`${event.run_id}-${event.seq}`}><summary><span className="event-seq">{String(event.seq).padStart(3, "0")}</span><b>{caseName(event.type)}</b><span>{event.actor}</span><span>STEP {event.step_id}</span></summary><pre>{pretty(event.payload)}</pre></details>)}</div>}
         </section>
-        <div className="result-strip"><div><span className="overline">MEASURED RESULT</span><strong>{outcome ? outcome.task_success ? "Task completed" : "Task incomplete" : "No result"}</strong><span>{outcome?.termination ? `Termination: ${outcome.termination}` : ""}</span></div><div><span className="overline">ATTACK EXPOSURE</span><strong>{exposure ? exposure.exact_payload_observed ? "Payload observed" : "No exact payload match" : outcome?.attack_present ? "Unmeasured" : "Benign task"}</strong><span>{outcome?.attack_present ? `Attack ${outcome.attack_success ? "succeeded" : "did not succeed"}` : ""}</span></div></div>
-        <div className="scope-note">{modelIsMock ? "Mock follows reference plans. Results measure the firewall on controlled trajectories." : "Recorded local Qwen run. A blocked leak does not imply the user's task was completed."} / Synthetic data / Simulated approvals</div>
+        <div className="result-strip"><div><span className="overline">TASK</span><strong>{outcome ? outcome.task_success ? "Completed" : "Incomplete" : "No result"}</strong></div><div><span className="overline">ATTACK</span><strong>{outcome?.attack_present ? outcome.attack_success ? "Succeeded" : "Prevented" : "No attack"}</strong></div></div>
       </main>
     </div>
   </div>;
