@@ -19,6 +19,7 @@ from sentinel.tools.registry import registry_for_domain
 
 class Firewall(Defense):
     name = "sentiel_rules"
+    MAX_ACTIVE_EXECUTIONS = 256
 
     def __init__(
         self,
@@ -209,7 +210,7 @@ class Firewall(Defense):
                     )
                 )
             try:
-                if scope not in self.states and len(self.states) >= 256:
+                if scope not in self.states and len(self.states) >= self.MAX_ACTIVE_EXECUTIONS:
                     return self.result(Decision.BLOCK, "RUN_CAPACITY_EXCEEDED", risk=1)
                 state = self.states.setdefault(scope, SecurityState())
                 if request.step_id <= state.last_step:
@@ -240,6 +241,20 @@ class Firewall(Defense):
             if len(self.cache) < 20_000:
                 self.cache[cache_key] = (fingerprint, decision)
             return decision
+
+    def end_execution(self, execution_id: str) -> None:
+        """Drop evidence, pending actions, and cached decisions for a completed run."""
+        with self.lock:
+            clear_monitor_execution = getattr(self.monitor, "clear_execution", None)
+            if clear_monitor_execution:
+                clear_monitor_execution(execution_id)
+            else:
+                clear_monitor_cache = getattr(self.monitor, "clear_cache", None)
+                if clear_monitor_cache:
+                    clear_monitor_cache()
+            self.states.pop(execution_id, None)
+            for key in [key for key in self.cache if key[0] == execution_id]:
+                self.cache.pop(key, None)
 
     def _decide(self, request: DefenseRequest, state: SecurityState) -> DefenseDecision:
         candidate = request.candidate_action

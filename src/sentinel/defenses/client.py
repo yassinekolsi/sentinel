@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from threading import Lock
+from urllib.parse import quote
 
 import httpx
 from pydantic import ValidationError
@@ -53,6 +55,10 @@ class HttpDefense(Defense):
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"), timeout=timeout_s, transport=transport, follow_redirects=False
         )
+        self._active_executions: set[str] = set()
+        self._active_lock = Lock()
+        self.cleanup_failures = 0
+        self.cleanup_unsupported = 0
 
     def health(self) -> bool:
         try:
@@ -62,6 +68,9 @@ class HttpDefense(Defense):
 
     def decide(self, request: DefenseRequest) -> DefenseDecision:
         payload = request.model_dump(mode="json")
+        execution_id = request.execution_id or request.run_id
+        with self._active_lock:
+            self._active_executions.add(execution_id)
         last_error: Exception | None = None
         for attempt in range(self.transport_retries + 1):
             try:
@@ -88,5 +97,43 @@ class HttpDefense(Defense):
         except DefenseUnavailable as exc:
             return fail_mode_decision(self.fail_mode, str(exc))
 
+    def end_execution(self, execution_id: str) -> None:
+        """Ask a compatible service to release this run; legacy services may return 404/405."""
+        with self._active_lock:
+            if execution_id not in self._active_executions:
+                return
+        path = f"/v1/executions/{quote(execution_id, safe='')}"
+        for attempt in range(self.transport_retries + 1):
+            try:
+                response = self._client.delete(path)
+            except httpx.TransportError:
+                if attempt < self.transport_retries:
+                    time.sleep(self.backoff_s * (attempt + 1))
+                    continue
+                with self._active_lock:
+                    self.cleanup_failures += 1
+                return
+            if response.status_code in {200, 204}:
+                with self._active_lock:
+                    self._active_executions.discard(execution_id)
+                return
+            if response.status_code in {404, 405}:
+                with self._active_lock:
+                    self.cleanup_unsupported += 1
+                    self._active_executions.discard(execution_id)
+                return
+            if response.status_code >= 500 and attempt < self.transport_retries:
+                time.sleep(self.backoff_s * (attempt + 1))
+                continue
+            with self._active_lock:
+                self.cleanup_failures += 1
+            return
+
     def close(self) -> None:
+        with self._active_lock:
+            active = list(self._active_executions)
+        for execution_id in active:
+            self.end_execution(execution_id)
         self._client.close()
+        with self._active_lock:
+            self._active_executions.clear()

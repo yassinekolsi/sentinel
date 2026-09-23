@@ -6,8 +6,10 @@ from fastapi import FastAPI
 
 from app.decision import decide
 from app.models import DefenseDecision, DefenseRequest
+from app.request_limits import RequestBodyLimitMiddleware
 
 app = FastAPI(title="SENTINEL defense starter", docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(RequestBodyLimitMiddleware)
 
 
 @app.get("/healthz")
