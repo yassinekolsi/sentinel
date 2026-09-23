@@ -1,6 +1,6 @@
-# sentiel — evidence-first action firewall for SENTINEL
+# sentinel — evidence-first action firewall for SENTINEL
 
-`sentiel` checks each proposed tool-using agent action and returns **ALLOW**, **BLOCK**, **ESCALATE**,
+`sentinel-firewall` checks each proposed tool-using agent action and returns **ALLOW**, **BLOCK**, **ESCALATE**,
 or **REWRITE**, with inspectable reasons and outcomes. Structural enforcement is the default; the
 optional local semantic monitor remains experimental.
 
@@ -11,7 +11,7 @@ run completed the requested draft**. These are measured outcomes, not jury score
 
 This independent repository retains the [SENTINEL Starter Kit](https://github.com/Skan22/Sentinel_Starter_Kit)
 at revision `dd2e5fe0979d0781a4bfe6d0849cd80cf69ef4a2`. See [UPSTREAM.md](UPSTREAM.md).
-The solution is intentionally spelled `sentiel`; the upstream simulator CLI is `sentinel`.
+The firewall CLI is `sentinel-firewall`; the upstream simulator CLI remains `sentinel`. The old `sentiel` alias remains for compatibility.
 
 ## Method
 
@@ -51,8 +51,8 @@ Use 64-bit Python 3.12 and `uv`, from the repository root in PowerShell:
 ```powershell
 .\scripts\setup-windows.ps1
 # If uv is absent: .\scripts\setup-windows.ps1 -InstallUv
-.\scripts\run-sentiel.ps1 doctor
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
+.\scripts\run-sentinel.ps1 doctor
+.\scripts\run-sentinel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model mock
 ```
 
 Setup uses committed `uv.lock`; initial dependency downloads need network access. Mock runs, tests,
@@ -69,7 +69,7 @@ ollama serve
 
 ## Next.js observatory
 
-The recording frontend lives in `frontend/`. It uses the ProxyTrace console layout and logo with
+The recording frontend lives in `frontend/`. It uses a workflow layout and the Sentinel shield with
 SENTINEL's redacted, measured traces. From PowerShell at the repository root:
 
 ```powershell
@@ -78,7 +78,7 @@ SENTINEL's redacted, measured traces. From PowerShell at the repository root:
 ```
 
 The script exports the current redacted traces, builds Next.js, and starts it on loopback. It shows
-ten recorded run groups, case selection, decision filters, search, source trust, the candidate action,
+ten recorded run groups, a clickable workflow, case selection, decision filters, search, source trust, the candidate action,
 the intervention, and what actually happened. Every page is marked as a recorded replay. A blocked
 attack with an incomplete user task stays labeled incomplete. All inputs are synthetic.
 
@@ -88,9 +88,9 @@ Every run prints its `events.live.jsonl` path. In another terminal:
 
 ```powershell
 $trace = 'artifacts\replace-with-printed-run-directory\events.live.jsonl'
-.\scripts\run-sentiel.ps1 dashboard $trace
+.\scripts\run-sentinel.ps1 dashboard $trace
 # Open http://127.0.0.1:8090
-.\scripts\run-sentiel.ps1 dashboard $trace --export-html artifacts\replay.html
+.\scripts\run-sentinel.ps1 dashboard $trace --export-html artifacts\replay.html
 ```
 
 The read-only dashboard provides run selection, search, decision filters, linked candidate → decision
@@ -101,16 +101,16 @@ Simulator logical timestamps and missing historical metadata are labeled honestl
 Offline exports are self-contained `RECORDED REPLAY` pages: no server, model, CDN, or internet needed.
 Use Previous/Next, arrow keys, or Play replay. Mock/real model, synthetic data, and simulated human
 labels remain visible. Presentation copies are redacted; raw artifacts are unchanged.
-The terminal viewer remains available as `sentiel view <trace> --follow` or `--decision block`.
+The terminal viewer remains available as `sentinel-firewall view <trace> --follow` or `--decision block`.
 
 ## Evaluation and current evidence
 
 ```powershell
-.\scripts\run-sentiel.ps1 evaluate --artifacts artifacts\rules
-.\scripts\run-sentiel.ps1 evaluate --undefended --artifacts artifacts\allow
-.\scripts\run-sentiel.ps1 evaluate --adaptive --artifacts artifacts\adaptive
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b --undefended
-.\scripts\run-sentiel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
+.\scripts\run-sentinel.ps1 evaluate --artifacts artifacts\rules
+.\scripts\run-sentinel.ps1 evaluate --undefended --artifacts artifacts\allow
+.\scripts\run-sentinel.ps1 evaluate --adaptive --artifacts artifacts\adaptive
+.\scripts\run-sentinel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b --undefended
+.\scripts\run-sentinel.ps1 run scenarios/public/enterprise/enterprise_poisoned_invoice.yaml --model ollama:qwen3:8b
 ```
 
 Raw evidence is in `artifacts/phase-final/`; historical evidence remains preserved. Artifacts/reports
@@ -151,8 +151,8 @@ support evaluation without Git. Older manifests keep their original metadata omi
 ```powershell
 $rulesRun = 'artifacts\replace-with-rules-directory'
 $allowRun = 'artifacts\replace-with-allow-directory'
-.\scripts\run-sentiel.ps1 bundle $rulesRun $allowRun --output artifacts\submission-v1
-.\scripts\run-sentiel.ps1 verify-bundle artifacts\submission-v1
+.\scripts\run-sentinel.ps1 bundle $rulesRun $allowRun --output artifacts\submission-v1
+.\scripts\run-sentinel.ps1 verify-bundle artifacts\submission-v1
 ```
 
 Open `index.html` in the bundle. It contains the actual source snapshot, source hashes, redacted
