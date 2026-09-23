@@ -7,10 +7,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
+from sentinel.api.request_limits import RequestBodyLimitMiddleware
 from sentinel.core.actions import Decision, DefenseDecision
-from sentinel.defenses.interface import DefenseRequest
+from sentinel.defenses.interface import MAX_DEFENSE_REQUEST_BYTES, DefenseRequest
 from sentinel.firewall.engine import Firewall
 from sentinel.firewall.semantic import LocalMonitor
 
@@ -52,4 +53,10 @@ def create_app(
                 Decision.BLOCK, "SERVICE_FAILURE", risk=1, confidence=0, explanation="Service failed closed."
             )
 
+    @app.delete("/v1/executions/{execution_id}", status_code=204)
+    def end_execution(execution_id: str) -> Response:
+        engine.end_execution(execution_id)
+        return Response(status_code=204)
+
+    app.add_middleware(RequestBodyLimitMiddleware, max_bytes=MAX_DEFENSE_REQUEST_BYTES)
     return app

@@ -24,11 +24,16 @@
 | Scenario YAML | `yaml.safe_load` only; 256 KB limit; strict Pydantic models (`extra="forbid"`) |
 | Fixture paths | relative, `.json`, no `..`, resolved within the benchmark root (symlink escapes rejected) |
 | Policy profiles | name pattern, resolved within `policies/` |
+| Defense requests | 256 KiB HTTP body cap before JSON parsing; bounded conversation, provenance, policy, and text fields; strict schema |
 | Defense responses | strict `DefenseDecision` schema, 64 KB limit, no redirects followed, reason code pattern, 4 KB metadata |
 | Rewrites | cannot make an action final, cannot name an unknown tool; the policy engine still checks the result |
 | Scenario mutations | declared surface, allowed operation, `max_chars`, no control characters, budget |
 | Artifact names | sanitized to a single safe path component; files opened in exclusive-create mode |
 | Optional containerized solution | static checker looks for a non-root Dockerfile user, dangerous Docker privileges, manifest errors, secret patterns, and escaping symlinks |
+
+Stateful HTTP defenses should implement idempotent `DELETE /v1/executions/{execution_id}`. The
+reference client calls it when each run ends. Keep the active-execution capacity guard fail-closed
+because clients can disconnect before cleanup; never evict a live scope to make room.
 
 ## Avoiding accidental hard-coding in self-testing
 

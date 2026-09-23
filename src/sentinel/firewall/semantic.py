@@ -126,6 +126,7 @@ class LocalMonitor:
         self.last_stats: dict[str, object] = {}
         self._lock = RLock()
         self._cache: OrderedDict[tuple[str, str, str, str, bool], Judgment] = OrderedDict()
+        self._cache_scopes: dict[tuple[str, str, str, str, bool], set[str]] = {}
         self._deadline: float | None = None
 
     def begin_decision(self, deadline: float) -> None:
@@ -190,10 +191,12 @@ class LocalMonitor:
             serialized,
             thinking,
         )
+        execution_id = request.execution_id or request.run_id
         self.last_stats = {"thinking": thinking, "context_omitted": omitted, "cache_hit": False}
         cached = self._cache.get(cache_key)
         if cached is not None:
             self._cache.move_to_end(cache_key)
+            self._cache_scopes.setdefault(cache_key, set()).add(execution_id)
             self.last_stats["cache_hit"] = True
             return cached.model_copy(deep=True)
 
@@ -209,7 +212,7 @@ class LocalMonitor:
             # Transport, timeout, and schema failures are transient observations,
             # not reusable judgments. A later identical call must be able to recover.
             raise
-        self._remember(cache_key, judgment.model_copy(deep=True))
+        self._remember(cache_key, judgment.model_copy(deep=True), execution_id)
         return judgment
 
     def _assess_uncached(
@@ -326,13 +329,31 @@ class LocalMonitor:
             )
         return judgment
 
-    def _remember(self, key: tuple[str, str, str, str, bool], entry: Judgment) -> None:
+    def _remember(self, key: tuple[str, str, str, str, bool], entry: Judgment, execution_id: str) -> None:
         self._cache[key] = entry
+        self._cache_scopes.setdefault(key, set()).add(execution_id)
         self._cache.move_to_end(key)
         if len(self._cache) > MAX_MONITOR_CACHE_ENTRIES:
-            self._cache.popitem(last=False)
+            evicted, _ = self._cache.popitem(last=False)
+            self._cache_scopes.pop(evicted, None)
+
+    def clear_execution(self, execution_id: str) -> None:
+        """Forget cached evidence when no other active execution shares that judgment."""
+        with self._lock:
+            for key, scopes in list(self._cache_scopes.items()):
+                scopes.discard(execution_id)
+                if not scopes:
+                    self._cache_scopes.pop(key, None)
+                    self._cache.pop(key, None)
+
+    def clear_cache(self) -> None:
+        """Forget cached judgments, including evidence text retained in their keys."""
+        with self._lock:
+            self._cache.clear()
+            self._cache_scopes.clear()
 
     def close(self) -> None:
         with self._lock:
             self._cache.clear()
+            self._cache_scopes.clear()
             self.client.close()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -43,6 +44,8 @@ from sentinel.storage.runs import ArtifactStore, sanitize_id
 from sentinel.tools.base import Sink, Tool
 from sentinel.tools.gateway import GatewayResult, ToolGateway
 from sentinel.tools.registry import ToolRegistry, registry_for_domain
+
+logger = logging.getLogger(__name__)
 
 
 class AttackMode(StrEnum):
@@ -306,7 +309,13 @@ def run_scenario(
         execution_id=execution_id,
         include_reference_plan=config.include_reference_plan,
     )
-    agent_result = agent.run()
+    try:
+        agent_result = agent.run()
+    finally:
+        try:
+            defense.end_execution(execution_id)
+        except Exception:
+            logger.exception("Defense execution cleanup failed; the service must retain its capacity guard")
 
     graders = grade_task(
         list(scenario.success_conditions), GradingContext(state=state, responses=agent_result.responses)
