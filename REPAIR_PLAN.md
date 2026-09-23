@@ -10,7 +10,7 @@ the latest tracked-code measurement. The note is retained as development history
 
 Repair the existing implementation and replace unsupported claims with measured evidence. Keep the current architecture and original results. Do not restart design, train a model, hide failures, or substitute scenario-specific rules.
 
-Workspace: `E:/web-tp/cp/sentiel`. Use `py -3.12 -m uv`. Make a lowercase commit after each validated milestone. Do not alter unrelated parent-directory files. Read this file and the code before relying on the older HANDOFF.md, which contains stale packaging claims.
+Workspace: `E:/web-tp/cp/sentinel`. Use `py -3.12 -m uv`. Make a lowercase commit after each validated milestone. Do not alter unrelated parent-directory files. Read this file and the code before relying on the older HANDOFF.md, which contains stale packaging claims.
 
 This plan follows an independent review that reproduced 277 passing tests, one Windows-privilege skip, and clean Ruff/mypy checks. The current structural mock result is 34/35 attacks prevented with 14/14 benign completion. The hybrid run has 94 monitor failures, zero usable semantic judgments, and 1/14 benign completion. Real-model evidence includes one matched attack pair that prevents disclosure but does not complete the task.
 

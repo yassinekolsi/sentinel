@@ -22,7 +22,6 @@ hf = ["transformers>=4.44", "torch>=2.3"]
 [project.scripts]
 sentinel = "sentinel.cli:app"
 sentinel-firewall = "sentinel.firewall.cli:app"
-sentiel = "sentinel.firewall.cli:app"
 
 [dependency-groups]
 dev = [

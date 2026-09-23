@@ -42,7 +42,7 @@ tests passed; the warnings are recorded here so a later dependency update can ad
 Command:
 
 ```sh
-uv run --frozen sentiel evaluate --artifacts artifacts/phase1-baseline
+uv run --frozen sentinel-firewall evaluate --artifacts artifacts/phase1-baseline
 ```
 
 The recorded run is in the ignored local artifact directory

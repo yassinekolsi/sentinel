@@ -18,7 +18,7 @@ BASELINES: dict[str, Callable[[], Defense]] = {
     "keyword": KeywordDefense,
     "heuristic_risk": HeuristicRiskDefense,
     "provenance": ProvenanceDefense,
-    "sentiel_rules": Firewall,
+    "sentinel_rules": Firewall,
 }
 
 

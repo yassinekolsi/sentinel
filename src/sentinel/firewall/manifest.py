@@ -36,7 +36,7 @@ def source_identity(root: Path) -> dict[str, Any]:
         files = git("ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
         origin = "git working tree"
     except (OSError, subprocess.CalledProcessError, ValueError):
-        marker = root / ".sentiel-source.json"
+        marker = root / ".sentinel-source.json"
         archived = json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else {}
         files = list(archived.get("file_sha256", {}))
         commit, dirty, origin = archived.get("commit"), None, "source archive" if archived else "unversioned directory"

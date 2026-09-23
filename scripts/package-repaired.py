@@ -219,7 +219,7 @@ def report(output: Path, *, preview: bool) -> None:
         "```powershell",
         "py -3.12 -m uv sync --frozen",
         "py -3.12 -m uv run --frozen pytest -ra",
-        "py -3.12 -m uv run --frozen sentiel evaluate --artifacts artifacts/reproduction",
+        "py -3.12 -m uv run --frozen sentinel-firewall evaluate --artifacts artifacts/reproduction",
         "py -3.12 -m uv run --frozen python scripts/real-repair-matrix.py --output artifacts/reproduction-real",
         "```",
         "",

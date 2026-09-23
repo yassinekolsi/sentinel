@@ -18,7 +18,7 @@ from sentinel.firewall.state import SecurityState
 
 Answer = Literal["yes", "no", "uncertain"]
 MAX_MONITOR_CACHE_ENTRIES = 256
-PROMPT_VERSION = "sentiel-monitor-v3"
+PROMPT_VERSION = "sentinel-monitor-v3"
 WIRE_SCHEMA_VERSION = "compact-v1"
 WIRE_TO_ANSWER: dict[int, Answer] = {0: "no", 1: "yes", 2: "uncertain"}
 

@@ -60,9 +60,9 @@ Use 64-bit Python 3.12 from the repository root:
 
 ```powershell
 py -3.12 -m uv sync --frozen
-py -3.12 -m uv run --frozen sentiel evaluate --artifacts artifacts/reproduce-rules
-py -3.12 -m uv run --frozen sentiel evaluate --undefended --artifacts artifacts/reproduce-allow
-py -3.12 -m uv run --frozen sentiel evaluate --adaptive --artifacts artifacts/reproduce-adaptive
+py -3.12 -m uv run --frozen sentinel-firewall evaluate --artifacts artifacts/reproduce-rules
+py -3.12 -m uv run --frozen sentinel-firewall evaluate --undefended --artifacts artifacts/reproduce-allow
+py -3.12 -m uv run --frozen sentinel-firewall evaluate --adaptive --artifacts artifacts/reproduce-adaptive
 py -3.12 -m uv run --frozen python scripts/semantic-diagnostic.py --output artifacts/reproduce-semantic
 py -3.12 -m uv run --frozen python scripts/real-repair-matrix.py --output artifacts/reproduce-real
 ```

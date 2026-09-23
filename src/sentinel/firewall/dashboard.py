@@ -86,7 +86,7 @@ def export_dashboard(path: Path, output: Path) -> None:
 def create_dashboard(path: Path) -> FastAPI:
     """One fixed trace; no file browser, write routes, remote assets, or CORS access."""
     selected = path.resolve()
-    app = FastAPI(title="sentiel observatory", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="sentinel observatory", docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
 
     @lru_cache(maxsize=1)

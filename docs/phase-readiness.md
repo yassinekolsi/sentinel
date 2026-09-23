@@ -18,7 +18,7 @@ actually contains 40 public and 9 validation scenarios. Evaluation uses the chec
 | --- | --- | --- |
 | Four legal interventions | `firewall/engine.py`; full mock trace exercises all four | Implemented |
 | No scenario-specific decisions | Request-only policy/provenance/state; information-boundary tests | No scenario ID, filename, or expected outcome used by firewall |
-| Live useful observability | `sentiel dashboard`; run/decision/search filters; linked action, decision, outcome; source classifications | Browser-tested on desktop/mobile; live file polling is labeled honestly |
+| Live useful observability | `sentinel-firewall dashboard`; run/decision/search filters; linked action, decision, outcome; source classifications | Browser-tested on desktop/mobile; live file polling is labeled honestly |
 | Risk, confidence, reasons | Decision cards, metadata, source trust/sensitivity, raw step details | Explicitly uncalibrated |
 | Keep legitimate work useful | All 14 mock benign tasks; fresh Qwen benign task per domain | 3/3 real benign probes completed with no interventions; small sample |
 | Real attack reaches defense | Two fresh matched Qwen poisoned-invoice pairs | Payload observed and credential proposal blocked; legitimate draft remains incomplete |
@@ -26,7 +26,7 @@ actually contains 40 public and 9 validation scenarios. Evaluation uses the chec
 | Ablation evidence | Matched allow-all vs structural, all 49 mock cases; historical semantic diagnostics | No full hybrid rerun after failed semantic safety gate |
 | Adaptive/multi-step evidence | Full scheduled adaptive mock run and published multi-step/memory cases | Scheduled payloads, not a learned adaptive adversary |
 | Reproducibility | Frozen dependencies, manifests, source/config/model hashes, tests, source archive | Historical missing metadata remains missing; greedy repeats are not independent samples |
-| Portable evidence | `sentiel bundle` and `verify-bundle`; redacted offline replays, exact source snapshot, checksums | Report/video excluded; original manifests refer to original raw files |
+| Portable evidence | `sentinel-firewall bundle` and `verify-bundle`; redacted offline replays, exact source snapshot, checksums | Report/video excluded; original manifests refer to original raw files |
 | Responsible-AI declaration | README model/data declaration and safety boundaries | Simulated human, no production claims, known utility failure disclosed |
 | Video / technical report | User-excluded deliverables | Not changed; user owns these separately |
 | GitHub publication / submission | Local working tree and bundle prepared | No new commit, push, upload, or receipt claimed |

@@ -1,1 +1,1 @@
-"""Sentiel: structural enforcement with semantic uncertainty resolution."""
+"""Sentinel: structural enforcement with semantic uncertainty resolution."""

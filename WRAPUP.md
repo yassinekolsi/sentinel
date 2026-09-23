@@ -12,7 +12,7 @@ use [README.md](README.md) and [docs/evaluation-results/structural-mock-v1.md](d
 - Local-only agent endpoint validation and bounded handling of malformed Ollama response envelopes.
 - Presentation redaction for short/multiword credentials.
 - Source/file hashes, evaluation from extracted source archives, and a verified code/evidence bundle
-  independent of report/video. Commands: `sentiel bundle` and `sentiel verify-bundle`.
+  independent of report/video. Commands: `sentinel-firewall bundle` and `sentinel-firewall verify-bundle`.
 
 ## Measured outcomes
 

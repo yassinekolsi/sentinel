@@ -37,9 +37,9 @@ try {
         throw 'Dependency synchronization failed.'
     }
 
-    & py -3.12 -m uv run --frozen sentiel doctor
+    & py -3.12 -m uv run --frozen sentinel-firewall doctor
     if ($LASTEXITCODE -ne 0) {
-        throw 'The sentiel runtime check failed.'
+        throw 'The sentinel runtime check failed.'
     }
 }
 finally {

@@ -31,7 +31,7 @@ def create_app(
         yield
         engine.close()
 
-    app = FastAPI(title="sentiel action firewall", lifespan=lifespan)
+    app = FastAPI(title="sentinel action firewall", lifespan=lifespan)
     app.state.firewall = engine
 
     @app.get("/healthz")

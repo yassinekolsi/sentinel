@@ -13,7 +13,7 @@ def test_package_source_snapshot_and_tamper_detection(tmp_path):
     source = root / "README.md"
     source.write_text("source snapshot")
     marker = {"commit": "archived-commit", "file_sha256": {"README.md": sha256(source)}}
-    (root / ".sentiel-source.json").write_text(json.dumps(marker))
+    (root / ".sentinel-source.json").write_text(json.dumps(marker))
     run = tmp_path / "run"
     run.mkdir()
     (run / "events.live.jsonl").write_text(
@@ -27,7 +27,7 @@ def test_package_source_snapshot_and_tamper_detection(tmp_path):
     assert archive.is_file() and verify_bundle(output)["ok"]
     with zipfile.ZipFile(output / "source.zip") as packaged:
         assert packaged.read("README.md") == source.read_bytes()
-        assert ".sentiel-source.json" in packaged.namelist()
+        assert ".sentinel-source.json" in packaged.namelist()
     assert not list(output.rglob("*technical-report*"))
     (output / "index.html").write_text("tampered")
     (output / "unexpected.txt").write_text("extra")
@@ -42,7 +42,7 @@ def test_package_source_snapshot_and_tamper_detection(tmp_path):
 def test_archive_source_identity_is_recomputed_after_edit(tmp_path):
     source = tmp_path / "main.py"
     source.write_text("initial")
-    (tmp_path / ".sentiel-source.json").write_text(
+    (tmp_path / ".sentinel-source.json").write_text(
         json.dumps({"commit": "original", "file_sha256": {"main.py": sha256(source)}})
     )
     before = source_identity(tmp_path)

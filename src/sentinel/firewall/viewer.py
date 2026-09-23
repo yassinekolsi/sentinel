@@ -172,7 +172,7 @@ def render(
         event_label = Text(label + "\n" + str(event.get("actor", "")))
         table.add_row(str(event.get("step_id")), event_label, content)
     status = "LIVE STREAM" if live else "RECORDED REPLAY"
-    heading_text = Text("sentiel | action firewall | ")
+    heading_text = Text("sentinel | action firewall | ")
     heading_text.append(status, style="bold green" if live else "bold cyan")
     heading_text.append("\nUncalibrated risk indicators | synthetic data | simulated human approvals")
     heading = Panel(heading_text)

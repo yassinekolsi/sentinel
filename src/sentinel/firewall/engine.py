@@ -18,7 +18,7 @@ from sentinel.tools.registry import registry_for_domain
 
 
 class Firewall(Defense):
-    name = "sentiel_rules"
+    name = "sentinel_rules"
     MAX_ACTIVE_EXECUTIONS = 256
 
     def __init__(
@@ -31,7 +31,7 @@ class Firewall(Defense):
     ) -> None:
         self.monitor = monitor
         self.cascade = cascade
-        self.name = "sentiel_hybrid" if monitor else "sentiel_rules"
+        self.name = "sentinel_hybrid" if monitor else "sentinel_rules"
         self.audit_dir = audit_dir
         self.semantic_deadline_s = semantic_deadline_s
         self.states: dict[str, SecurityState] = {}

@@ -71,7 +71,7 @@ def build_bundle(root: Path, runs: list[Path], output: Path) -> Path:
         raise ValueError("output overlaps the source tree")
     output.mkdir(parents=True)
     with zipfile.ZipFile(output / "source.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(".sentiel-source.json", json.dumps(source, indent=2))
+        archive.writestr(".sentinel-source.json", json.dumps(source, indent=2))
         for name, expected in source_files.items():
             path = root / name
             if not path.resolve().is_relative_to(root) or sha256(path) != expected:
@@ -115,11 +115,11 @@ def build_bundle(root: Path, runs: list[Path], output: Path) -> Path:
         )
     (output / "evidence-index.json").write_text(json.dumps(inputs, indent=2), encoding="utf-8")
     (output / "index.html").write_text(
-        '<!doctype html><html lang="en"><meta charset="utf-8"><title>sentiel evidence bundle</title>'
+        '<!doctype html><html lang="en"><meta charset="utf-8"><title>sentinel evidence bundle</title>'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         "<style>body{max-width:900px;margin:60px auto;padding:24px;font:17px/1.7 system-ui;"
         "background:#0b1016;color:#edf3f8}a{color:#83edc5}li{margin:12px 0}</style>"
-        "<h1>sentiel / evidence bundle</h1><p>Offline interactive replays. Synthetic data; simulated human approvals. "
+        "<h1>sentinel / evidence bundle</h1><p>Offline interactive replays. Synthetic data; simulated human approvals. "
         "Each replay labels its model and measured outcomes, including failures. "
         "Mock trajectories follow reference plans; "
         "they do not establish real-model robustness.</p><ul>" + "".join(links) + "</ul>"
@@ -135,8 +135,8 @@ def build_bundle(root: Path, runs: list[Path], output: Path) -> Path:
         "Extract source.zip. From its root, with Python 3.12 and uv installed:\n"
         "py -3.12 -m uv sync --frozen\n"
         "py -3.12 -m uv run --frozen pytest\n"
-        "py -3.12 -m uv run --frozen sentiel evaluate --artifacts artifacts/reproduction\n"
-        "py -3.12 -m uv run --frozen sentiel verify-bundle <extracted-bundle-directory>\n"
+        "py -3.12 -m uv run --frozen sentinel-firewall evaluate --artifacts artifacts/reproduction\n"
+        "py -3.12 -m uv run --frozen sentinel-firewall verify-bundle <extracted-bundle-directory>\n"
         "For real-agent runs, install local Ollama and qwen3:8b as described in README.md.\n"
         "Model weights are not included. Setup needs dependency downloads; replays need no network.\n"
         "Checksums detect changes, not authorship. Keep the ZIP checksum separately.\n",
