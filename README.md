@@ -178,6 +178,22 @@ imply legitimate task completion. Broad robustness, calibration, and AgentDojo e
 
 ## Development checks
 
+The `Makefile` is the shared developer entry point on Linux, macOS, and Windows environments with
+GNU Make installed. From the repository root, install the frozen Python 3.12 environment and run the
+same check gate used by CI:
+
+```sh
+uv sync --frozen --python 3.12
+make check
+```
+
+`make check` runs Ruff lint and formatting checks, mypy, the main and starter-kit test suites, and
+scenario validation. It does not download model weights or require Ollama. `make setup` performs the
+same frozen environment sync.
+
+On Windows PowerShell without GNU Make, continue using the commands below after
+`scripts/setup-windows.ps1`:
+
 ```powershell
 py -3.12 -m uv run --frozen ruff check src tests scripts starter-kits
 py -3.12 -m uv run --frozen ruff format --check src tests scripts starter-kits
@@ -191,8 +207,9 @@ py -3.12 -m uv run --project ..\.. --frozen pytest -q
 Pop-Location
 ```
 
-Current checks: 318 passed, one Windows symlink-privilege skip; starter kits 10 and 2 passed.
-See [docs/phase-readiness.md](docs/phase-readiness.md) for the specification audit and remaining scope.
+The latest local check gate and reproducible structural/mock baseline are recorded in
+[docs/development-baseline.md](docs/development-baseline.md). See
+[docs/phase-readiness.md](docs/phase-readiness.md) for the specification audit and remaining scope.
 Our code is in `src/sentinel/firewall/`; the upstream simulator is retained under `src/sentinel/`.
 See [architecture](docs/architecture.md), [threat model](docs/threat-model.md), and
 [repair notes](docs/repair-notes.md). The upstream license is retained in [LICENSE](LICENSE).
