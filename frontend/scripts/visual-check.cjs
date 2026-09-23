@@ -1,9 +1,11 @@
-const { chromium } = require('playwright-core');
+const fs = require('node:fs');
+const { chromium } = require('playwright');
 const path = require('node:path');
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+  const browser = await chromium.launch({ headless: true });
   const output = path.resolve('../.runtime');
+  fs.mkdirSync(output, { recursive: true });
   const errors = [];
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   desktop.on('pageerror', error => errors.push(error.message));
