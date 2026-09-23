@@ -70,6 +70,37 @@ def test_explicit_trusted_policy_can_authorize_confidential_external_disclosure(
     assert Firewall().decide(request).decision is Decision.ALLOW
 
 
+def test_disclosure_permission_is_bound_to_its_destination_and_data_kind() -> None:
+    internal_only = {
+        "allowed_tools": ["email_draft"],
+        "internal_email_domains": ["atlas.example"],
+        "public_disclosure_permissions": [{"destination": "internal_email", "kind": "confidential"}],
+    }
+    external_draft = defense_request(
+        tool_call("email_draft", to="outside@vendor.example", subject="Update", body=PROTECTED),
+        policy_context=internal_only,
+        **evidence(json.dumps({"text": PROTECTED}), sensitivity=Sensitivity.CONFIDENTIAL),
+    )
+    internal_draft = defense_request(
+        tool_call("email_draft", to="user@atlas.example", subject="Update", body=PROTECTED),
+        policy_context=internal_only,
+        **evidence(json.dumps({"text": PROTECTED}), sensitivity=Sensitivity.CONFIDENTIAL),
+    )
+    assert Firewall().decide(external_draft).reason_codes == ["SENSITIVE_DATA_FLOW"]
+    assert Firewall().decide(internal_draft).decision is Decision.ALLOW
+
+    secret = "credential-X9k42z"
+    credential_request = defense_request(
+        tool_call("email_draft", to="outside@vendor.example", subject="Approved", body=secret),
+        policy_context={
+            **internal_only,
+            "public_disclosure_permissions": [{"destination": "external_email", "kind": "confidential"}],
+        },
+        **evidence(json.dumps({"password": secret}), sensitivity=Sensitivity.CONFIDENTIAL),
+    )
+    assert Firewall().decide(credential_request).reason_codes == ["SENSITIVE_DATA_FLOW"]
+
+
 def test_memory_preserves_trust_and_sensitivity_with_backward_defaults() -> None:
     state = state_for("enterprise_project_status")
     memory = AgentMemory(state)

@@ -53,7 +53,7 @@ class ProvenanceDefense(Defense):
         candidate = request.candidate_action
         action = target_action(request)
         untrusted, sensitive = texts_by_trust(request)
-        allowed = request.policy_context.get("allowed_tools", [])
+        allowed = request.policy_context.allowed_tools
 
         if action.type is ActionType.TOOL_CALL:
             if action.tool not in allowed:

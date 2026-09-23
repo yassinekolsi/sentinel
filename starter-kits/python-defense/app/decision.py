@@ -55,7 +55,7 @@ def decide(request: DefenseRequest) -> DefenseDecision:
     if action is None or action.type != "tool_call" or action.tool is None:
         return DefenseDecision(decision="allow", risk_score=0.1, confidence=0.5, reason_codes=["NOT_A_TOOL_CALL"])
 
-    if action.tool not in request.policy_context.get("allowed_tools", []):
+    if action.tool not in request.policy_context.allowed_tools:
         return DefenseDecision(
             decision="block", risk_score=0.9, confidence=0.8, reason_codes=["TOOL_NOT_REQUIRED_FOR_GOAL"]
         )
@@ -68,7 +68,7 @@ def decide(request: DefenseRequest) -> DefenseDecision:
             )
 
     status = action.arguments.get("status")
-    consequential = action.tool in request.policy_context.get("consequential_tools", []) or (
+    consequential = action.tool in request.policy_context.consequential_tools or (
         isinstance(status, str) and status in STATUS_CONSEQUENTIAL.get(action.tool, set())
     )
     confirmed = action_digest(action) in request.history_digest.confirmations_granted

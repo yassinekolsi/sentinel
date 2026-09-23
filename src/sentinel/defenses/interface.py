@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Annotated, Any, Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sentinel.core.actions import CandidateAction, DefenseDecision
+from sentinel.core.policy_context import PolicyContext
 from sentinel.core.provenance import Provenance
 
 MAX_DEFENSE_REQUEST_BYTES = 256 * 1024
@@ -69,18 +70,9 @@ class DefenseRequest(_Strict):
     conversation: list[ConversationItem] = Field(default_factory=list, max_length=MAX_CONVERSATION_ITEMS)
     observation: ObservationView | None = None
     candidate_action: CandidateAction
-    policy_context: dict[str, Any] = Field(default_factory=dict)
+    policy_context: PolicyContext = Field(default_factory=PolicyContext)
     provenance: list[ProvenanceRecord] = Field(default_factory=list, max_length=MAX_PROVENANCE_RECORDS)
     history_digest: HistoryDigest = Field(default_factory=HistoryDigest)
-
-    @field_validator("policy_context")
-    @classmethod
-    def _bounded_policy_context(cls, value: dict[str, Any]) -> dict[str, Any]:
-        if len(value) > 128:
-            raise ValueError("policy_context contains more than 128 top-level entries")
-        if any(not key or len(key) > 128 for key in value):
-            raise ValueError("policy_context keys must be 1 to 128 characters")
-        return value
 
     @model_validator(mode="after")
     def _bounded_serialized_request(self) -> Self:

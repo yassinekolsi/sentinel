@@ -75,7 +75,7 @@ class Firewall(Defense):
             tool
             and (
                 tool.is_consequential(action.arguments)
-                or action.tool in request.policy_context.get("confirmation_required_tools", [])
+                or action.tool in request.policy_context.confirmation_required_tools
             )
         )
 
@@ -93,9 +93,9 @@ class Firewall(Defense):
             return "unknown", True
         if self.is_read(action):
             return "read", False
-        domains = request.policy_context.get("internal_email_domains", [])
+        domains = request.policy_context.internal_email_domains
         recipient = str(action.arguments.get("to", "")).lower()
-        internal = bool(recipient and any(recipient.endswith("@" + str(domain).lower()) for domain in domains))
+        internal = bool(recipient and any(recipient.endswith("@" + domain) for domain in domains))
         if action.tool in {"email_send", "email_draft"}:
             return ("internal_email" if internal else "external_email"), not internal
         if action.tool in {"ticket_update", "incident_update", "case_note_create", "incident_create"}:
@@ -106,14 +106,9 @@ class Firewall(Defense):
 
     @staticmethod
     def disclosure_allowed(request: DefenseRequest, destination: str, kind: str) -> bool:
-        permissions = request.policy_context.get("public_disclosure_permissions", [])
-        if not isinstance(permissions, list):
-            return False
         return any(
-            isinstance(permission, dict)
-            and permission.get("destination") in {destination, "*"}
-            and permission.get("kind") in {kind, "*"}
-            for permission in permissions
+            permission.destination in {destination, "*"} and permission.kind in {kind, "*"}
+            for permission in request.policy_context.public_disclosure_permissions
         )
 
     def structural(
@@ -121,7 +116,7 @@ class Firewall(Defense):
     ) -> DefenseDecision | None:
         if action.type is ActionType.TOOL_CALL:
             tool = self.tools.get(action.tool or "")
-            if tool is None or action.tool not in request.policy_context.get("allowed_tools", []):
+            if tool is None or action.tool not in request.policy_context.allowed_tools:
                 return self.result(
                     Decision.BLOCK, "TOOL_NOT_PERMITTED", risk=1, explanation="Tool is outside active authority."
                 )

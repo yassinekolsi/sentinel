@@ -173,7 +173,7 @@ class LocalMonitor:
             }
             for index, item in enumerate(selected)
         ]
-        policy = {k: v for k, v in request.policy_context.items() if k not in {"policy_id", "policy_version"}}
+        policy = request.policy_context.model_dump(mode="json", exclude={"policy_id", "policy_version"})
         data = {
             "policy": policy,
             "user_goal": request.user_goal,
@@ -183,7 +183,7 @@ class LocalMonitor:
             "object_state": state.objects,
         }
         serialized = json.dumps(data, ensure_ascii=False)
-        version = json.dumps(request.policy_context.get("policy_version"), sort_keys=True)
+        version = json.dumps(request.policy_context.policy_version, sort_keys=True)
         cache_key = (
             self.model,
             self.model_digest,

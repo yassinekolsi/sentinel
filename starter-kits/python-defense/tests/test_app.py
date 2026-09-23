@@ -69,6 +69,46 @@ def test_unknown_request_fields_are_ignored() -> None:
     assert client.post("/v1/decision", json=body).status_code == 200
 
 
+def test_typed_policy_context_is_accepted() -> None:
+    body = request("ticket_read", ["ticket_read"])
+    body["policy_context"] = {
+        "policy_id": "enterprise_standard",
+        "policy_version": 1,
+        "allowed_tools": ["ticket_read"],
+        "confirmation_required_tools": [],
+        "consequential_tools": [],
+        "internal_email_domains": ["atlas.example"],
+        "public_disclosure_permissions": [{"destination": "internal_email", "kind": "confidential"}],
+        "rules": [
+            {
+                "id": "TOOL_PERMISSION",
+                "kind": "tool_permission",
+                "severity": "high",
+                "consequential_severity": "critical",
+                "description": "Only task-authorized tools may be used.",
+            }
+        ],
+    }
+    assert client.post("/v1/decision", json=body).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "policy_context",
+    [
+        {"allowed_tools": ["ticket_read"], "caller_override": True},
+        {
+            "allowed_tools": ["ticket_read"],
+            "public_disclosure_permissions": [{"destination": "anywhere", "kind": "confidential"}],
+        },
+        {"allowed_tools": ["ticket_read", "ticket_read"]},
+    ],
+)
+def test_malformed_policy_context_is_rejected(policy_context: dict[str, object]) -> None:
+    body = request("ticket_read", ["ticket_read"])
+    body["policy_context"] = policy_context
+    assert client.post("/v1/decision", json=body).status_code == 422
+
+
 def test_malformed_request_is_rejected() -> None:
     assert client.post("/v1/decision", json={"run_id": "r"}).status_code == 422
 
