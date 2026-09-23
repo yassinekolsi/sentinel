@@ -1,8 +1,8 @@
-# Current handoff — 23 September 2026
+# Historical handoff snapshot — 23 September 2026
 
-The defense/observability work is complete for this pass. See [README.md](README.md) for current
-commands/evidence and [docs/phase-readiness.md](docs/phase-readiness.md) for the specification audit.
-The user excluded the video and technical report; neither was changed. No push or upload is claimed.
+This snapshot records an earlier local state. Its measurements, test counts, artifact paths, and
+publication status describe that date only. For current setup, validation, and versioned measurements,
+use [README.md](README.md) and [docs/evaluation-results/structural-mock-v1.md](docs/evaluation-results/structural-mock-v1.md).
 
 ## Implemented
 
@@ -28,8 +28,8 @@ The user excluded the video and technical report; neither was changed. No push o
 
 ## Locations
 
-- New raw evidence and portable bundle: `artifacts/phase-final/`.
-- Historical raw evidence: original artifact directories, including `artifacts/repair-v3/`.
+- New raw evidence and portable bundle at the time: `artifacts/phase-final/` (local and gitignored).
+- Historical raw evidence at the time: original artifact directories, including `artifacts/repair-v3/` (local and gitignored).
 - Browser verification/screenshots: `.runtime/`.
 - Source, tests, and updated docs are local working-tree changes; bundle captures their actual hashes.
 
