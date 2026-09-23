@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sentinel.core.actions import CandidateAction
+from sentinel.core.provenance import Sensitivity, TrustLevel
 from sentinel.defenses.interface import DefenseRequest
 
 SECRET_KEY = re.compile(r"password|secret|token|credential|api[_ -]?key|recovery[_ -]?key", re.I)
@@ -43,6 +44,8 @@ GENERIC_ENUMS = {
     "resolved",
     "true",
 }
+_TRUST_RANK = {level.value: level.rank for level in TrustLevel} | {"unknown": len(TrustLevel)}
+_SENSITIVITY_RANK = {level.value: level.rank for level in Sensitivity} | {"unknown": len(Sensitivity)}
 
 
 def normalized_text(value: str) -> str:
@@ -164,11 +167,10 @@ class SecurityState:
             provs = [records[p] for p in item.provenance_ids if p in records]
             complete = bool(provs) and len(provs) == len(item.provenance_ids)
             trust = max(provs, key=lambda p: p.trust_level.rank).trust_level.value if complete else "unknown"
-            sensitivity = max(provs, key=lambda p: p.sensitivity.rank).sensitivity.value if provs else "unknown"
+            sensitivity = max(provs, key=lambda p: p.sensitivity.rank).sensitivity.value if complete else "unknown"
             evidence = Evidence(key, item.role, item.content, trust, sensitivity, item.provenance_ids)
             self.evidence[key] = evidence
-            if sensitivity in {"confidential", "restricted"}:
-                self._extract(evidence)
+            self._extract(evidence)
         # Only an observed successful tool execution can advance lifecycle state.
         if request.observation and request.history_digest.tool_calls:
             call = request.history_digest.tool_calls[-1]
@@ -228,6 +230,10 @@ class SecurityState:
                 ),
             )
             entry.credential |= credential
+            if _SENSITIVITY_RANK[evidence.sensitivity] > _SENSITIVITY_RANK[entry.sensitivity]:
+                entry.sensitivity = evidence.sensitivity
+            if _TRUST_RANK[evidence.trust] > _TRUST_RANK[entry.source_trust]:
+                entry.source_trust = evidence.trust
             entry.field_paths.add(path or "$")
             entry.evidence_ids.add(evidence.id)
 
@@ -241,9 +247,9 @@ class SecurityState:
             elif isinstance(value, str):
                 if SECRET_KEY.search(key):
                     remember(value, True, path)
-                elif IDENTIFIER_KEY.search(key):
+                elif IDENTIFIER_KEY.search(key) and evidence.sensitivity in {"confidential", "restricted", "unknown"}:
                     remember(value, False, path)
-                elif not STRUCTURAL_KEY.search(key):
+                elif evidence.sensitivity in {"confidential", "restricted"} and not STRUCTURAL_KEY.search(key):
                     # Field names are retained only as diagnostics; sensitivity and
                     # observed provenance, not names, establish protection.
                     remember(value, False, path)
